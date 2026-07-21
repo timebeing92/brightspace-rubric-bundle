@@ -1,11 +1,12 @@
 # Rubric Loom — user-facing experience frame
 
 Status: design frame only. Nothing here authorizes a build; R3 (terminal
-wizard) and R4 (hosted bench) in `ROADMAP.md` gate the work. The register
-proposal below needs operator approval before any user-facing surface
-adopts it.
+wizard) and R4 (hosted bench) in `ROADMAP.md` gate the work. The loom
+register below — including warp/weft and the Unravel/Weave doors — was
+approved by the operator on 2026-07-21 and is canonical for user-facing
+surfaces.
 
-## Register proposal: the loom
+## Register: the loom
 
 A rubric is a woven grid — criteria are the warp, performance levels the
 weft. The proposed register:
@@ -25,9 +26,9 @@ weft. The proposed register:
   flavor lines held long enough to register, `--brisk`/plain-pipe escape
   hatches).
 
-Open for the operator: does the loom register carry your voice, or should
-this surface take a different metaphor? Recorded as an open question in the
-boundary doc.
+Resolved 2026-07-21: the operator approved the loom register (the loom,
+warp and weft). Wizard and bench copy build on this vocabulary without
+re-litigating it; individual flavor lines remain tunable at build time.
 
 ## The two-door journey
 

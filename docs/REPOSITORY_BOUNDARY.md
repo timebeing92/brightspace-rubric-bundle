@@ -2,10 +2,10 @@
 
 Status: activated at operator direction on 2026-07-21 (rubric-specific
 bundle repo requested in-session: extraction working now, build/import and
-user-facing surfaces framed). The product register name "Rubric Loom" and
-its door vocabulary (Unravel / Weave) are a proposal recorded in
-`docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md` and await operator confirmation
-before any user-facing surface adopts them.
+user-facing surfaces framed). The product register — "Rubric Loom", the
+Unravel / Weave doors, and the warp/weft grid metaphor — was approved by
+the operator on 2026-07-21; user-facing surfaces adopt it. The register
+details live in `docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md`.
 
 ## Decision
 
