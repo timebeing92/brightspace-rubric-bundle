@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Operator inputs and generated course artifacts are local-only.
+input/
+output/
+*.zip
+*.xlsx

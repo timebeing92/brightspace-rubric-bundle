@@ -1,0 +1,115 @@
+{
+  "schema": "coursecraft.workbench_vendor_pin/1",
+  "source_repository": "https://github.com/timebeing92/coursecraft-workbench.git",
+  "source_branch": "main",
+  "source_commit": "5f1b78b3da8d1e5701ffff4e302b8503b6cd17f6",
+  "source_committed_at": "2026-07-20T22:19:07-04:00",
+  "policy": "byte-identical mechanical promotion; behavior changes upstream first",
+  "files": [
+    {
+      "source": "scripts/build_rubric_package.py",
+      "target": "scripts/build_rubric_package.py",
+      "sha256": "12e44333c479e30765dbdf2539505d8202f4d0f2dd1e5f0b5b471584d7185177"
+    },
+    {
+      "source": "scripts/common_xml.py",
+      "target": "scripts/common_xml.py",
+      "sha256": "27e8e32971887eded7f4e1d54eb91a49e96eaebd0f51b942908feab6a9903430"
+    },
+    {
+      "source": "scripts/extract_course_context.py",
+      "target": "scripts/extract_course_context.py",
+      "sha256": "5e9ac57f3ffca79fc75e4af12cc616094c6f241582078604260454077e1e2022"
+    },
+    {
+      "source": "scripts/extract_rubrics_to_workbook.py",
+      "target": "scripts/extract_rubrics_to_workbook.py",
+      "sha256": "596e783c8538f50ecdebf7a76a798f12501d199e497584693e83a79dc36a1e3e"
+    },
+    {
+      "source": "scripts/flat_markdown_to_json.py",
+      "target": "scripts/flat_markdown_to_json.py",
+      "sha256": "d901b7dd2cd85fcaf57243b89bfb8497872f575dc658813e3c9ed355f6ae180e"
+    },
+    {
+      "source": "scripts/rubric_package_lib.py",
+      "target": "scripts/rubric_package_lib.py",
+      "sha256": "6c4198fb55ca5f023fd2a8eb1959aa2feaa3422e8f93b9a40b5b606ae1a723c8"
+    },
+    {
+      "source": "scripts/rubrics_to_docx.py",
+      "target": "scripts/rubrics_to_docx.py",
+      "sha256": "f1c15a635f3cd13e845e109754b57df155b174611d40cfa0beb92e4b4977b111"
+    },
+    {
+      "source": "scripts/validate_rubric_package.py",
+      "target": "scripts/validate_rubric_package.py",
+      "sha256": "68f34a721d48a555087050ccb0355f6b0c70b836a79fa6f99c1f62c3b319a458"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/context/reference_course_shell/README.md",
+      "target": "tests/fixtures/rubric_package/context/reference_course_shell/README.md",
+      "sha256": "c90f04a0b28a224cd9889ae874c0b8a8608694f9c812f29eb6e3cb3aa29e0a5b"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/context/reference_course_shell/imsmanifest.xml",
+      "target": "tests/fixtures/rubric_package/context/reference_course_shell/imsmanifest.xml",
+      "sha256": "27b07f17ac72237b1af6866f47995235196d00592de172add7d2cfd550f25d39"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/context/reference_course_shell/orgunitconfig/orgunitconfig.xml",
+      "target": "tests/fixtures/rubric_package/context/reference_course_shell/orgunitconfig/orgunitconfig.xml",
+      "sha256": "a1cdaaf0196b937990f86d40f34872d6da0b2b35b529fe4ec75ae121c2808887"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/input/rubrics.example.json",
+      "target": "tests/fixtures/rubric_package/input/rubrics.example.json",
+      "sha256": "624b2fcb8a44bdc11805310b1b3581b3c93d40730e142f49c7e801d4788ebd32"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/input/rubrics_flat.example.md",
+      "target": "tests/fixtures/rubric_package/input/rubrics_flat.example.md",
+      "sha256": "61b389a0574b407e1df09ffe9803b6c6becd973685409cf2ed5109fc7c07cece"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/input/rubrics_flat_custom_overall_thresholds.example.md",
+      "target": "tests/fixtures/rubric_package/input/rubrics_flat_custom_overall_thresholds.example.md",
+      "sha256": "ca34afba55717ff99d842ba2cf16796b69d90934dec3485f6b641a939241cf4f"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/input/rubrics_flat_flexible_columns.example.md",
+      "target": "tests/fixtures/rubric_package/input/rubrics_flat_flexible_columns.example.md",
+      "sha256": "0f880bfdb9f2b832bef453283e6c96e44c535b30e1ca0f3b207bc28a35d7d84c"
+    },
+    {
+      "source": "tests/fixtures/rubric_package/input/rubrics_flat_inferred_levels.example.md",
+      "target": "tests/fixtures/rubric_package/input/rubrics_flat_inferred_levels.example.md",
+      "sha256": "9a3cf71f17191f950dec843ed0138708eb571110dff561b53e349537ffabbe4f"
+    },
+    {
+      "source": "tests/fixtures/tiny_rubrics_export/rubrics_d2l.xml",
+      "target": "tests/fixtures/tiny_rubrics_export/rubrics_d2l.xml",
+      "sha256": "92a28e41d6f3a925c65117870210187aeb56c094059c18de3dfa4766dddbfe87"
+    },
+    {
+      "source": "tests/test_extract_rubrics_to_workbook.py",
+      "target": "tests/test_extract_rubrics_to_workbook.py",
+      "sha256": "4071c3c6805a2d65dceb1fbcaab555f643d70de8f0893412691fe9ce29d045df"
+    },
+    {
+      "source": "tests/test_rubric_package_builder.py",
+      "target": "tests/test_rubric_package_builder.py",
+      "sha256": "ae570f1f43466c56cfa115d643b08e8337e3e29071831b0f355550d855160c6b"
+    },
+    {
+      "source": "workspace/generated/shareable-brightspace-blueprint-bundle/schemas/progress_events_schema.json",
+      "target": "workspace/reference/schemas/progress/progress_events_schema.json",
+      "sha256": "7588cf71eecebcadfe56f07ceb3eb77b748ba6fd601765ec2f3658a2a5dca5c0"
+    },
+    {
+      "source": "workspace/reference/schemas/rubrics/rubrics_schema.json",
+      "target": "workspace/reference/schemas/rubrics/rubrics_schema.json",
+      "sha256": "8997f8546d803070ec6d38235a25563d3b63a71210b09fb444ed5690ecf3a0b6"
+    }
+  ]
+}

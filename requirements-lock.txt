@@ -1,0 +1,10 @@
+attrs==26.1.0
+et_xmlfile==2.0.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+lxml==6.1.1
+openpyxl==3.1.5
+python-docx==1.2.0
+referencing==0.37.0
+rpds-py==2026.6.3
+typing_extensions==4.16.0

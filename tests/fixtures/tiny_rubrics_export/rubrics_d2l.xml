@@ -1,0 +1,92 @@
+<rubrics schemaversion="v2011">
+  <rubric
+    id="1"
+    resource_code="RUBRIC-ONE"
+    name="Sample Rubric One"
+    type="1"
+    scoring_method="3"
+    uses_overall_score="True">
+    <description text_type="text"><text /></description>
+    <criteria_groups>
+      <criteria_group name="Criteria" sort_order="1">
+        <level_set>
+          <levels>
+            <level name="Achieving" sort_order="1" level_id="101" />
+            <level name="Beginning" sort_order="2" level_id="102" />
+          </levels>
+        </level_set>
+        <criteria>
+          <criterion name="Clarity" sort_order="1">
+            <cells>
+              <cell level_id="101" cell_value="10.000000000">
+                <description text_type="text/html"><text>&lt;p&gt;Fully explains the idea.&lt;/p&gt;</text></description>
+                <feedback text_type="text"><text /></feedback>
+              </cell>
+              <cell level_id="102" cell_value="0.000000000">
+                <description text_type="text/html"><text>&lt;p&gt;Needs more detail.&lt;/p&gt;</text></description>
+                <feedback text_type="text"><text /></feedback>
+              </cell>
+            </cells>
+          </criterion>
+        </criteria>
+      </criteria_group>
+    </criteria_groups>
+    <overall_level_set>
+      <overall_levels>
+        <overall_level name="Beginning" sort_order="2" range_start_value="50.000000000">
+          <description text_type="text"><text /></description>
+          <feedback text_type="text"><text /></feedback>
+        </overall_level>
+        <overall_level name="Achieving" sort_order="1" range_start_value="90.000000000">
+          <description text_type="text"><text /></description>
+          <feedback text_type="text"><text /></feedback>
+        </overall_level>
+      </overall_levels>
+    </overall_level_set>
+  </rubric>
+  <rubric
+    id="2"
+    resource_code="RUBRIC-TWO"
+    name="Second Rubric / Two"
+    type="1"
+    scoring_method="3"
+    uses_overall_score="True">
+    <description text_type="text"><text /></description>
+    <criteria_groups>
+      <criteria_group name="Criteria" sort_order="1">
+        <level_set>
+          <levels>
+            <level name="Achieving" sort_order="1" level_id="201" />
+            <level name="Beginning" sort_order="2" level_id="202" />
+          </levels>
+        </level_set>
+        <criteria>
+          <criterion name="Evidence" sort_order="1">
+            <cells>
+              <cell level_id="201" cell_value="5.000000000">
+                <description text_type="text/html"><text>&lt;table&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;Uses strong examples.&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;</text></description>
+                <feedback text_type="text"><text /></feedback>
+              </cell>
+              <cell level_id="202" cell_value="0.000000000">
+                <description text_type="text/html"><text>&lt;p&gt;Examples are missing.&lt;/p&gt;</text></description>
+                <feedback text_type="text"><text /></feedback>
+              </cell>
+            </cells>
+          </criterion>
+        </criteria>
+      </criteria_group>
+    </criteria_groups>
+    <overall_level_set>
+      <overall_levels>
+        <overall_level name="Beginning" sort_order="2" range_start_value="60.000000000">
+          <description text_type="text"><text /></description>
+          <feedback text_type="text"><text /></feedback>
+        </overall_level>
+        <overall_level name="Achieving" sort_order="1" range_start_value="80.000000000">
+          <description text_type="text"><text /></description>
+          <feedback text_type="text"><text /></feedback>
+        </overall_level>
+      </overall_levels>
+    </overall_level_set>
+  </rubric>
+</rubrics>

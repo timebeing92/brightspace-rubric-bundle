@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<orgunit identifier="SAMPLE-ORGUNIT-0001"
+         default_nav="Sample Course Navbar"
+         default_homepage="Sample Course Homepage" />

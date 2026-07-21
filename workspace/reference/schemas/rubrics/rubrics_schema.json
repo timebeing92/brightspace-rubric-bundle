@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "coursecraft.rubrics/1",
+  "title": "Coursecraft Rubric Grids",
+  "description": "Canonical JSON emitted by extract_rubrics_to_workbook.py --json from a Brightspace rubrics_d2l.xml. One record per rubric with the full grid (criteria x levels x cells), overall scoring bands, and the rubric element's attributes preserved verbatim. Extraction only: authored wording is preserved, points are carried both parsed (points) and raw (points_raw), and nothing is inferred.",
+  "type": "object",
+  "required": ["schema", "source_file", "rubrics", "diagnostics"],
+  "additionalProperties": false,
+  "definitions": {
+    "level": {
+      "type": "object",
+      "required": ["level_id", "name", "sort_order", "score_band"],
+      "additionalProperties": false,
+      "properties": {
+        "level_id": {"type": "string"},
+        "name": {"type": "string"},
+        "sort_order": {"type": "integer"},
+        "score_band": {"type": "string", "description": "Rendered overall-band label (e.g. '90%+') when the level name matches an overall level; empty otherwise."}
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": ["level_id", "level_name", "points", "points_raw", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "level_id": {"type": "string"},
+        "level_name": {"type": "string"},
+        "points": {"type": ["number", "null"], "description": "Parsed cell_value; null when absent or non-numeric (see points_raw)."},
+        "points_raw": {"type": "string", "description": "Verbatim cell_value attribute."},
+        "description": {"type": "string", "description": "Authored cell text, HTML flattened to readable text."}
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": ["name", "sort_order", "cells"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "sort_order": {"type": "integer"},
+        "cells": {"type": "array", "items": {"$ref": "#/definitions/cell"}}
+      }
+    },
+    "overall_level": {
+      "type": "object",
+      "required": ["name", "sort_order", "range_start_value", "description", "feedback"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "sort_order": {"type": "integer"},
+        "range_start_value": {"type": ["number", "null"]},
+        "description": {"type": "string"},
+        "feedback": {"type": "string"}
+      }
+    },
+    "rubric": {
+      "type": "object",
+      "required": ["id", "resource_code", "name", "scoring_method", "attributes", "description", "levels", "criteria", "overall_levels"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "description": "D2L numeric rubric id — the value activity payloads reference in their rubric associations."},
+        "resource_code": {"type": "string"},
+        "name": {"type": "string"},
+        "scoring_method": {"type": "string", "description": "Verbatim scoring_method attribute; numeric code, not interpreted."},
+        "attributes": {
+          "type": "object",
+          "description": "Every attribute on the <rubric> element, verbatim (type, state, visibility, uses_overall_score, ...).",
+          "additionalProperties": {"type": "string"}
+        },
+        "description": {"type": "string"},
+        "levels": {"type": "array", "items": {"$ref": "#/definitions/level"}},
+        "criteria": {"type": "array", "items": {"$ref": "#/definitions/criterion"}},
+        "overall_levels": {"type": "array", "items": {"$ref": "#/definitions/overall_level"}}
+      }
+    }
+  },
+  "properties": {
+    "schema": {"type": "string", "const": "coursecraft.rubrics/1"},
+    "source_file": {"type": "string"},
+    "rubrics": {"type": "array", "items": {"$ref": "#/definitions/rubric"}},
+    "diagnostics": {"type": "array", "items": {"type": "string"}}
+  }
+}

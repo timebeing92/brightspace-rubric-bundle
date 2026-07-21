@@ -1,0 +1,334 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "coursecraft.progress/1",
+  "title": "Coursecraft Pipeline Progress Events",
+  "description": "One JSON object per stdout line, emitted by build_blueprint_bundle.py when --progress-events is set. Consumers must treat any stdout line that does not parse as JSON (or lacks an 'event' key) as pass-through step output. Event order: one run_start, then step_start/step_end pairs, then exactly one run_end. status describes pipeline completion only: a partial run emitted at least one primary deliverable alongside explicit component issues. Whether those documents usably mirror the export is stated separately by run_end.delivery (usable/empty/core_failures); producers before 1.3.1 omit it.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/run_start"
+    },
+    {
+      "$ref": "#/definitions/step_start"
+    },
+    {
+      "$ref": "#/definitions/step_end"
+    },
+    {
+      "$ref": "#/definitions/run_end"
+    }
+  ],
+  "definitions": {
+    "run_start": {
+      "type": "object",
+      "required": [
+        "event",
+        "schema",
+        "label",
+        "total",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "const": "run_start"
+        },
+        "schema": {
+          "const": "coursecraft.progress/1"
+        },
+        "label": {
+          "type": "string",
+          "description": "Output stem for the run"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Planned step labels in execution order"
+        }
+      }
+    },
+    "step_start": {
+      "type": "object",
+      "required": [
+        "event",
+        "index",
+        "total",
+        "label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "const": "step_start"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based step index"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "step_end": {
+      "type": "object",
+      "required": [
+        "event",
+        "index",
+        "status",
+        "seconds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "const": "step_end"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "error"
+          ]
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string",
+          "description": "Present when status is 'error'"
+        }
+      }
+    },
+    "run_end": {
+      "type": "object",
+      "required": [
+        "event",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "const": "run_end"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "partial",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Human summary for complete, partial, or failed runs"
+        },
+        "bundle_dir": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "markdown": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "json": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "docx": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "workbook": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rubrics_json": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rubrics_unparsed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rubrics_workbook": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rubrics_docx": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "qa_report": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "render_qa_dir": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "docx_structure_report": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "docx_structure_json": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status_report": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status_json": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "run_identity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Portable coursecraft.run/1 source, producer, contract, step, and checksum receipt"
+            }
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "step",
+              "status",
+              "message"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "step": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "failed",
+                  "degraded",
+                  "skipped"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "weeks": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rubrics": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "diagnostics": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "needs_review": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Count of 'Needs review' field fallbacks in the rendered Markdown"
+            },
+            "qa": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "breaks": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "warnings": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "notes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        "delivery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "usable",
+            "empty",
+            "core_failures"
+          ],
+          "properties": {
+            "usable": {
+              "type": "boolean"
+            },
+            "empty": {
+              "type": "boolean"
+            },
+            "core_failures": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
