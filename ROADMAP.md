@@ -59,20 +59,27 @@ upstream-first in the Workbench; this repo re-pins after review.
 Exit conditions: upstream promotion merged with its validator and fixtures;
 one Brightspace field import of a woven package verified by the operator.
 
-## R3 — Terminal Rubric Wizard
+## R3 — Terminal Rubric Wizard (complete)
+
+R3 was explicitly operator-authorized ahead of the still-open R1 and R2 work.
+That sequencing adds a guided surface over the existing Unravel capability; it
+does not imply a release candidate or a productized Weave door.
 
 - Co-located in this repo (the quiz-bundle decision pattern: wizard
   co-located, CLI-and-events boundary). The wizard consumes the orchestrator
   CLI and `coursecraft.progress/1` only; it does not parse D2L XML or infer
   artifacts.
-- Register and voice per `docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md`, pending
-  operator approval of the loom register.
+- Register and voice follow the operator-approved
+  `docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md`: workshop doctor, source and peek
+  cards, commissioned options, the live step board, results and partial-
+  delivery cards, plain/headless behavior, and a macOS launcher.
 - The multi-tool launcher question stays governed by the ecosystem
   rule-of-three; this wizard's arrival is a data point, not a trigger
   override.
 
-Exit condition: wizard drives the full Unravel journey end-to-end on the
-synthetic fixture with the same receipts as the CLI.
+Exit condition met: the wizard drives the full Unravel journey end-to-end on
+the synthetic fixture with the same artifacts as the CLI. Verified
+2026-07-23 with 52 tests passing and one machine-evidence-dependent skip.
 
 ## R4 — Hosted workshop bench (trigger-gated)
 

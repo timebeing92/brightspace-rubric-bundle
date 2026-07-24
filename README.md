@@ -52,6 +52,25 @@ names survive the loop. The receipt lands in
 `output/synthetic_journey/journey_receipt.json`. See
 `docs/SYNTHETIC_JOURNEY.md`.
 
+## The terminal wizard (Unravel, guided)
+
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py
+```
+
+Or double-click `launch_rubric_loom.command` (macOS): it offers the
+guided loom, a demonstration unravel on the synthetic fixture, and the
+workshop doctor — and on a fresh machine it offers to build the `.venv`
+first via `scripts/bootstrap_env.py`.
+
+The Rubric Loom wizard (roadmap R3) walks the Unravel door in the family
+register: doctor checklist, source pick and peek card, commissioned
+options, a live step board over the orchestrator's real
+`coursecraft.progress/1` events, and a results card whose reviewer DOCX
+is marked "start here". Piped and `--plain` runs stay escape-free;
+`--source PATH --yes` runs it non-interactively. See
+`docs/RUBRIC_LOOM_WIZARD.md`.
+
 ## Verify the source boundary
 
 ```bash
@@ -74,7 +93,7 @@ review and tests:
 | Pinned extraction scripts + `coursecraft.rubrics/1` schema | Byte-identical to Workbench at the pin commit |
 | Pinned builder scripts (Weave) | Functional CLIs; door not yet productized |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
-| Terminal Rubric Wizard | Not started; framed in `docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md` |
+| Terminal Rubric Wizard | Working Unravel surface; guided source selection, doctor, progress board, results card, plain/headless mode, and macOS launcher |
 | Hosted workshop bench | Trigger-gated; see `ROADMAP.md` R4 |
 
 The ownership decision record is `docs/REPOSITORY_BOUNDARY.md`. The phased
