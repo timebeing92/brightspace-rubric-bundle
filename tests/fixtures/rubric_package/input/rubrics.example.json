@@ -1,0 +1,114 @@
+{
+  "package": {
+    "manifest_identifier": "D2L_SAMPLE_RUBRICS_FIRST_PASS",
+    "resource_prefix": "A1B2C3D4-E5F6-7890-ABCD-1234567890AB"
+  },
+  "notes": [
+    "This is a rubric-only package.",
+    "Manual activity attachment is still required after import unless activity XML is also updated."
+  ],
+  "excluded_items": [
+    "Student Lounge",
+    "Intake Survey"
+  ],
+  "rubrics": [
+    {
+      "name": "Week 1 Discussion: Introductions and Predictions",
+      "kind": "discussion",
+      "source_title": "Week 1 Discussion: Predictions & Introductions",
+      "source_id": "266",
+      "grade_item_id": "SAMPLE-899620",
+      "criteria": [
+        {
+          "name": "Introduction and Prediction Example",
+          "weight": 40,
+          "levels": {
+            "Advanced": "Clearly introduces the learner and provides a specific prediction example that fits the prompt.",
+            "Proficient": "Introduces the learner and provides a relevant example with only minor gaps in detail.",
+            "Developing": "Provides a limited introduction or an underdeveloped example.",
+            "Needs Improvement": "Does not provide a usable introduction or prediction example."
+          }
+        },
+        {
+          "name": "Prediction Reasoning and Stakes",
+          "weight": 35,
+          "levels": {
+            "Advanced": "Clearly explains what informed the prediction, the decision it shaped, and what was at stake.",
+            "Proficient": "Explains the prediction logic and stakes with only minor gaps in development.",
+            "Developing": "Partially explains the reasoning or stakes but remains surface-level.",
+            "Needs Improvement": "Does not adequately explain the reasoning or stakes."
+          }
+        },
+        {
+          "name": "Writing Conventions and Professionalism",
+          "weight": 25,
+          "levels": {
+            "Advanced": "Uses clear, professional writing with strong control and negligible mechanical issues.",
+            "Proficient": "Uses generally clear and professional writing with minor issues.",
+            "Developing": "Shows uneven writing control or professionalism.",
+            "Needs Improvement": "Writing is unclear or error-heavy enough to interfere with understanding."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Project Checkpoint 1: Organization Selection and AI Risk Analysis",
+      "kind": "assignment",
+      "source_title": "Week 2: Initial Project Work",
+      "source_id": "275",
+      "grade_item_id": "SAMPLE-917685",
+      "criteria": [
+        {
+          "name": "Organization and Data Environment",
+          "weight": 25,
+          "levels": {
+            "Advanced": "Clearly identifies the organization and accurately describes the main types of data it processes.",
+            "Proficient": "Identifies the organization and its data environment with only minor gaps.",
+            "Developing": "Identifies the organization but describes the data environment only partially.",
+            "Needs Improvement": "Does not clearly identify the organization or its data environment."
+          }
+        },
+        {
+          "name": "Sensitivities, Risks, and Constraints",
+          "weight": 25,
+          "levels": {
+            "Advanced": "Thoughtfully analyzes the likely sensitivities, risks, and relevant constraints.",
+            "Proficient": "Analyzes the main risks and constraints with only minor gaps.",
+            "Developing": "Identifies some risks or constraints, but the analysis is general or incomplete.",
+            "Needs Improvement": "Does not adequately analyze the relevant sensitivities, risks, or constraints."
+          }
+        },
+        {
+          "name": "Responsible AI Implications",
+          "weight": 20,
+          "levels": {
+            "Advanced": "Clearly explains what the identified constraints imply for responsible AI implementation.",
+            "Proficient": "Explains the responsible AI implications reasonably well with minor gaps.",
+            "Developing": "Offers a limited or loosely connected discussion of implications.",
+            "Needs Improvement": "Does not adequately explain what the constraints imply for responsible AI implementation."
+          }
+        },
+        {
+          "name": "Use of Course Evidence",
+          "weight": 20,
+          "levels": {
+            "Advanced": "Uses relevant course resources or case materials to justify the analysis.",
+            "Proficient": "Uses course resources appropriately with only minor limits.",
+            "Developing": "Refers to course material in a limited way or relies too heavily on assumptions.",
+            "Needs Improvement": "Does not use course resources meaningfully."
+          }
+        },
+        {
+          "name": "Writing Conventions and Professionalism",
+          "weight": 10,
+          "levels": {
+            "Advanced": "Uses polished, professional writing conventions appropriate to graduate-level work.",
+            "Proficient": "Uses clear and professional writing overall, with minor issues.",
+            "Developing": "Shows uneven control of writing conventions or professional tone.",
+            "Needs Improvement": "Writing is unclear, error-heavy, or insufficiently professional for the task."
+          }
+        }
+      ]
+    }
+  ]
+}
