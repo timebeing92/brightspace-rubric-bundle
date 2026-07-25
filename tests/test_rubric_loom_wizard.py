@@ -487,8 +487,9 @@ def test_state_is_remembered_and_corruption_tolerated(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     payload = json.loads(state.read_text(encoding="utf-8"))
-    assert payload["source"] == str(FIXTURE)
-    assert payload["docx"] is False
+    assert payload["schema"] == "rubric_loom.state/2"
+    assert payload["doors"]["unravel"]["source"] == str(FIXTURE)
+    assert payload["doors"]["unravel"]["docx"] is False
 
     state.write_text("{not-json", encoding="utf-8")
     result = run_wizard(

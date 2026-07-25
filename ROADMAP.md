@@ -18,7 +18,7 @@ condition or an explicit operator decision.
 Exit condition: private `main` is green and no release has been cut. Met at
 activation.
 
-## R1 — Unravel hardening and release identity
+## R1 — Unravel hardening and release identity (complete)
 
 - Run receipt: decide whether Unravel emits `coursecraft.run/1` (the bundle
   release receipt contract) or stays with progress events only; implement
@@ -29,10 +29,10 @@ activation.
 - Version tag policy consistent with the blueprint bundle (`v1.0.0` on first
   consumable release).
 
-Exit condition: a checksum-verified release candidate built from a clean
-tree, with CI verifying release inputs.
+Exit condition met: deterministic `v1.0.0` asset and checksum published from a
+clean source ref, with the manifest advertising the working Unravel surface.
 
-## R2 — Weave productization
+## R2 — Weave productization (complete)
 
 The builder door becomes a first-class product. All semantic work is
 upstream-first in the Workbench; this repo re-pins after review.
@@ -56,19 +56,21 @@ upstream-first in the Workbench; this repo re-pins after review.
 - A Weave orchestrator peer to `run_rubric_bundle.py`, emitting the same
   progress contract.
 
-Exit conditions: upstream promotion merged with its validator and fixtures;
-one Brightspace field import of a woven package verified by the operator.
+Exit conditions met 2026-07-25: strict producer accepted in Workbench,
+five-package Brightspace sandbox import/re-export matrix passed with zero
+semantic comparison errors, refusal created no object, the exact producer was
+byte-pinned here, and the six-step Weave orchestrator passed its synthetic
+round trip.
 
 ## R3 — Terminal Rubric Wizard (complete)
 
-R3 was explicitly operator-authorized ahead of the still-open R1 and R2 work.
-That sequencing adds a guided surface over the existing Unravel capability; it
-does not imply a release candidate or a productized Weave door.
+R3 began as the Unravel surface and now presents both accepted doors through
+one shell and launcher.
 
 - Co-located in this repo (the quiz-bundle decision pattern: wizard
-  co-located, CLI-and-events boundary). The wizard consumes the orchestrator
-  CLI and `coursecraft.progress/1` only; it does not parse D2L XML or infer
-  artifacts.
+  co-located, CLI-and-events boundary). Both journeys consume orchestrator
+  CLIs and `coursecraft.progress/1`; Weave preflight and artifact truth come
+  only from the pinned producer and final receipt.
 - Register and voice follow the operator-approved
   `docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md`: workshop doctor, source and peek
   cards, commissioned options, the live step board, results and partial-
@@ -77,11 +79,11 @@ does not imply a release candidate or a productized Weave door.
   rule-of-three; this wizard's arrival is a data point, not a trigger
   override.
 
-Exit condition met: the wizard drives the full Unravel journey end-to-end on
-the synthetic fixture with the same artifacts as the CLI. Verified
-2026-07-23 with 52 tests passing and one machine-evidence-dependent skip.
+Exit condition met: the wizard drives both synthetic journeys end-to-end with
+CLI-equivalent artifacts, explicit fallback and write approvals, isolated
+state, and unchanged Unravel regression behavior.
 
-## R4 — Hosted workshop bench (trigger-gated)
+## R4 — Hosted workshop bench (authorized, pending pinned release)
 
 - A Rubric Loom bench in `coursecraft-workshop-space`, only under the
   ecosystem bench-registry pattern and only with separate operator

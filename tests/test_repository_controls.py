@@ -59,3 +59,23 @@ def test_only_canonical_workbench_sources_are_promoted() -> None:
     )
     assert "scripts/docx_to_rubric_contract.py" not in sources
     assert "scripts/make_rubric_package.py" in sources
+
+
+def test_weave_tui_owns_no_rubric_semantics() -> None:
+    """The Weave journey may call the orchestrator, never semantic modules."""
+    source = (REPO_ROOT / "scripts" / "rubric_loom_weave.py").read_text(
+        encoding="utf-8"
+    )
+    forbidden = (
+        "import rubric_authoring",
+        "from rubric_authoring",
+        "import rubric_package_lib",
+        "from rubric_package_lib",
+        "import docx",
+        "from docx",
+        "ElementTree",
+        "build_rubrics_xml",
+        "normalize_source",
+    )
+    assert not any(marker in source for marker in forbidden)
+    assert "run_weave_bundle.py" in source

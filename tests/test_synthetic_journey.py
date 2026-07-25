@@ -48,3 +48,19 @@ def test_journey_weaves_validates_and_unravels(tmp_path: Path) -> None:
     weave_receipt = json.loads(Path(receipt["artifacts"]["weave_run_identity"]).read_text())
     assert weave_receipt["schema"] == "coursecraft.run/1"
     assert weave_receipt["status"] == "ok"
+
+    # The documented default journey is a reusable proof command, so an
+    # existing successful destination must be replaced safely and cleanly.
+    rerun = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "run_synthetic_journey.py"),
+            "--output-dir",
+            str(journey_dir),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert rerun.returncode == 0, rerun.stderr

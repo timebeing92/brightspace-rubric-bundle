@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""Rubric Loom — terminal wizard for the Unravel door (roadmap R3).
+"""Rubric Loom — two-door terminal wizard for Unravel and Weave.
 
-A guided surface over ``run_rubric_bundle.py``. The wizard consumes only
-the orchestrator CLI and its ``coursecraft.progress/1`` events — the
-CLI-and-events boundary the Blueprint Wizard and Quiz Binder established.
-It never parses D2L XML beyond presence detection (a shallow byte scan at
-the peek card), never infers artifacts (delivery claims come from this
-run's events plus on-disk existence), and composes the pinned pipeline
-rather than reimplementing any of it.
+A shared shell routes to the existing Unravel journey over
+``run_rubric_bundle.py`` or the bounded Weave journey over
+``run_weave_bundle.py``. Both doors consume only orchestrator CLIs and
+``coursecraft.progress/1`` events. The TUI owns no rubric semantics.
 
 Register and voice follow docs/RUBRIC_LOOM_EXPERIENCE_FRAME.md, approved
 by the operator on 2026-07-21; the R3 build was authorized by the
@@ -20,24 +17,21 @@ environment error, 3 no rubric evidence in the source, 130 interrupted.
 from __future__ import annotations
 
 import argparse
-import collections
 import importlib.util
 import json
 import os
 import re
-import select
 import shlex
-import signal
-import subprocess
 import sys
-import time
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import loom_art
+import loom_progress
 import loom_ui
 import run_rubric_bundle as unravel
+import rubric_loom_weave as weave
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
@@ -117,13 +111,13 @@ def landing(term: loom_ui.Term) -> bool:
     """The welcome screen: what this is, what you bring, what you get,
     and how to steer. Returns False when the operator leaves here."""
     rows: list[tuple[str, str]] = [
-        ("", "The Rubric Loom unravels the rubrics inside a Brightspace"),
-        ("", "course export into readable cloth."),
+        ("", "The Rubric Loom has two doors for Brightspace rubrics:"),
+        ("", "Unravel reads an export; Weave builds an import package."),
         ("", ""),
-        ("you bring", "a course export zip, an unpacked export folder,"),
-        (" ", "or a bare rubrics_d2l.xml"),
-        ("you get", "a reviewer DOCX, an editing workbook (XLSX), and a"),
-        (" ", "validated contract (JSON), together in one bundle folder"),
+        ("you bring", "a course export for Unravel, or an authored DOCX,"),
+        (" ", "Markdown, or JSON rubric for Weave"),
+        ("you get", "review artifacts from Unravel, or a validated rubric-"),
+        (" ", "only Brightspace import ZIP from Weave"),
         ("", ""),
         ("", "Everything runs on this machine. Nothing is sent anywhere;"),
         ("", "nothing touches Brightspace."),
@@ -159,6 +153,38 @@ def save_state(state: dict) -> None:
         STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass  # remembering answers is a courtesy, never a failure
+
+
+def door_state(state: dict, door: str) -> dict:
+    """Read namespaced state, with the R3 flat shape treated as Unravel."""
+    doors = state.get("doors")
+    if isinstance(doors, dict) and isinstance(doors.get(door), dict):
+        return dict(doors[door])
+    if door == "unravel":
+        return {
+            key: state[key]
+            for key in ("source", "docx")
+            if key in state
+        }
+    return {}
+
+
+def save_door_state(door: str, values: dict) -> None:
+    state = load_state()
+    existing_unravel = door_state(state, "unravel")
+    doors = state.get("doors")
+    if not isinstance(doors, dict):
+        doors = {}
+    if existing_unravel and "unravel" not in doors:
+        doors["unravel"] = existing_unravel
+    doors[door] = dict(values)
+    save_state(
+        {
+            "schema": "rubric_loom.state/2",
+            "last_door": state.get("last_door", door),
+            "doors": doors,
+        }
+    )
 
 
 def relative_display(path: Path) -> str:
@@ -325,8 +351,23 @@ def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
         ("python-docx (reviewer document)", module_present("docx"), "", False),
         ("Unravel orchestrator", ORCHESTRATOR.is_file(), "scripts/run_rubric_bundle.py", True),
         (
+            "Weave orchestrator",
+            weave.ORCHESTRATOR.is_file(),
+            "scripts/run_weave_bundle.py",
+            True,
+        ),
+        (
             "coursecraft.rubrics/1 schema",
             unravel.RUBRICS_SCHEMA_PATH.is_file(),
+            "",
+            True,
+        ),
+        (
+            "coursecraft.rubric_authoring/1 schema",
+            (
+                REPO_ROOT
+                / "workspace/reference/schemas/rubrics/rubric_authoring_schema.json"
+            ).is_file(),
             "",
             True,
         ),
@@ -492,117 +533,21 @@ def run_unravel(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / LOG_NAME
-    log = log_path.open("w", encoding="utf-8")
-    log.write("rubric_loom_wizard run\n")
-    log.write("command: " + " ".join(command) + "\n")
-    log.write("started: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n---\n")
-
-    board: loom_ui.StepBoard | None = None
-    run_end: dict | None = None
-    ok_steps: list[str] = []
-    failed_step: str | None = None
-    failed_message = ""
-    steps: list[str] = []
-    display_started = 0.0
-    last_tick = 0.0
-    paced = (not term.plain) and min_step_seconds > 0
-
-    pending: collections.deque = collections.deque()
-
-    def apply(event: dict) -> None:
-        nonlocal board, run_end, failed_step, failed_message, steps, display_started
-        kind = event.get("event")
-        if kind == "run_start":
-            steps = [str(step) for step in event.get("steps", [])]
-            board = loom_ui.StepBoard(term, steps, flavor=FLAVOR)
-        elif kind == "step_start" and board is not None:
-            display_started = time.monotonic()
-            board.step_start(int(event.get("index", 0)))
-        elif kind == "step_end" and board is not None:
-            index = int(event.get("index", 0))
-            status = str(event.get("status", "error"))
-            board.step_end(index, status, float(event.get("seconds") or 0.0))
-            if 1 <= index <= len(steps):
-                if status == "ok":
-                    ok_steps.append(steps[index - 1])
-                else:
-                    failed_step = steps[index - 1]
-                    failed_message = str(event.get("message") or "")
-        elif kind == "run_end":
-            run_end = event
-        # Unknown event kinds are ignored, never narrated.
-
-    def pump() -> None:
-        """Apply queued events; completed steps are held on screen for
-        min_step_seconds (display-only — recorded timings stay real)."""
-        nonlocal last_tick
-        while pending:
-            event = pending[0]
-            if (
-                paced
-                and event.get("event") == "step_end"
-                and board is not None
-                and time.monotonic() - display_started < min_step_seconds
-            ):
-                break
-            apply(pending.popleft())
-        now = time.monotonic()
-        if board is not None and now - last_tick >= 0.1:
-            board.tick()
-            last_tick = now
-
-    proc = subprocess.Popen(
+    progress = loom_progress.consume(
+        term,
         command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        log_path,
+        log_title="rubric_loom_wizard unravel run",
+        flavor=FLAVOR,
+        min_step_seconds=min_step_seconds,
     )
-    assert proc.stdout is not None
-    interrupted = False
-    reader_done = False
-    try:
-        while not reader_done or pending:
-            if not reader_done:
-                ready, _, _ = select.select([proc.stdout], [], [], 0.08)
-                if ready:
-                    line = proc.stdout.readline()
-                    if not line:
-                        reader_done = True
-                    else:
-                        log.write(line)
-                        stripped = line.strip()
-                        if stripped:
-                            try:
-                                pending.append(json.loads(stripped))
-                            except json.JSONDecodeError:
-                                # progress/1 consumer rule: non-JSON lines
-                                # pass through.
-                                if board is not None:
-                                    board.output_line(stripped)
-                                else:
-                                    print("  " + term.dim(stripped))
-                elif proc.poll() is not None:
-                    reader_done = True
-            else:
-                time.sleep(0.05)
-            pump()
-    except KeyboardInterrupt:
-        interrupted = True
-        try:
-            if proc.poll() is None:
-                proc.send_signal(signal.SIGINT)
-                proc.wait(timeout=5)
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            proc.terminate()
-    finally:
-        return_code = proc.wait()
-        if board is not None and not interrupted:
-            board.finish()
-        log.write(f"---\nchild exit: {return_code}\n")
-        log.close()
+    return_code = progress.return_code
+    run_end = progress.run_end
+    ok_steps = progress.ok_steps
+    failed_step = progress.failed_step
+    failed_message = progress.failed_message
 
-    if interrupted:
+    if progress.interrupted:
         print()
         rows: list[tuple[str, str]] = []
         rows.append(("completed", ", ".join(ok_steps) if ok_steps else "no step had finished"))
@@ -719,6 +664,11 @@ def failure_card(
 # ---------------------------------------------------------------------------
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--door",
+        choices=("unravel", "weave"),
+        help="choose a door (legacy --source/--yes defaults to unravel)",
+    )
     parser.add_argument("--source", type=Path, help="export zip, unpacked folder, or rubrics_d2l.xml")
     parser.add_argument("--output-dir", type=Path, help="bundle destination (default: <repo>/output/<label>__rubric_bundle)")
     parser.add_argument("--label", help="artifact stem (default: derived from the source name)")
@@ -727,6 +677,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--brisk", action="store_true", help="skip the splash and the step-board pacing")
     parser.add_argument("--plain", action="store_true", help="plain text: no color, art, or in-place redraws")
     parser.add_argument("--doctor", action="store_true", help="run the workshop checks and exit")
+    parser.add_argument(
+        "--approve-weave",
+        action="store_true",
+        help="named final approval for a headless Weave write",
+    )
+    parser.add_argument("--allow-even-spacing", action="store_true")
+    parser.add_argument("--allow-equal-weights", action="store_true")
+    parser.add_argument("--context-dir", type=Path)
+    parser.add_argument("--source-label")
+    parser.add_argument("--orgunit-identifier")
+    parser.add_argument("--default-nav")
+    parser.add_argument("--default-homepage")
+    parser.add_argument("--title")
+    parser.add_argument("--keyword")
+    parser.add_argument("--manifest-identifier")
+    parser.add_argument("--resource-prefix")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--step-timeout", type=float, default=900.0)
     return parser.parse_args(argv if argv is not None else sys.argv[1:])
 
 
@@ -748,7 +716,7 @@ def _start_unravel(
     label: str,
     use_docx: bool,
 ) -> int:
-    save_state({"source": str(source), "docx": use_docx})
+    save_door_state("unravel", {"source": str(source), "docx": use_docx})
     print(loom_ui.heading(term, "The unravelling", "4 of 4"))
     print(trail(term, "unravelling"))
     guidance(term, "The board is live - real steps, real timings. Ctrl-C stops cleanly.")
@@ -831,7 +799,7 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
 def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
     """The reversible journey: source → label → bundle → DOCX → confirm,
     with ``b`` stepping back one screen at every prompt."""
-    state = load_state()
+    state = door_state(load_state(), "unravel")
     source: Path | None = None
     peeked_for: Path | None = None
     label: str | None = None
@@ -999,6 +967,47 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
             return _start_unravel(term, args, source, out_dir, label, use_docx)
 
 
+def choose_door(term: loom_ui.Term, state: dict) -> str:
+    remembered = str(state.get("last_door") or "unravel")
+    if remembered not in {"unravel", "weave"}:
+        remembered = "unravel"
+    return str(
+        loom_ui.choose(
+            term,
+            "Which door should the loom open?",
+            [
+                (
+                    "unravel",
+                    "Unravel — read rubrics from a Brightspace export",
+                ),
+                (
+                    "weave",
+                    "Weave — build a rubric-only Brightspace import package",
+                ),
+                ("q", "Leave the loom without running"),
+            ],
+            default=remembered,
+        )
+    )
+
+
+def remember_last_door(door: str) -> None:
+    state = load_state()
+    doors = state.get("doors")
+    if not isinstance(doors, dict):
+        doors = {}
+    legacy_unravel = door_state(state, "unravel")
+    if legacy_unravel and "unravel" not in doors:
+        doors["unravel"] = legacy_unravel
+    save_state(
+        {
+            "schema": "rubric_loom.state/2",
+            "last_door": door,
+            "doors": doors,
+        }
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     term = loom_ui.Term(plain=args.plain)
@@ -1014,6 +1023,33 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "rubric_loom_wizard: --yes needs --source PATH (defaults answer "
             "prompts; the source has no default)",
+            file=sys.stderr,
+        )
+        return 2
+    if args.door != "weave" and (
+        args.approve_weave
+        or args.allow_even_spacing
+        or args.allow_equal_weights
+        or args.context_dir is not None
+        or args.source_label is not None
+        or args.orgunit_identifier is not None
+        or args.default_nav is not None
+        or args.default_homepage is not None
+        or args.title is not None
+        or args.keyword is not None
+        or args.manifest_identifier is not None
+        or args.resource_prefix is not None
+        or args.force
+        or args.step_timeout != 900.0
+    ):
+        print(
+            "rubric_loom_wizard: Weave-only options require --door weave",
+            file=sys.stderr,
+        )
+        return 2
+    if args.door == "weave" and args.no_docx:
+        print(
+            "rubric_loom_wizard: --no-docx belongs to the Unravel door",
             file=sys.stderr,
         )
         return 2
@@ -1039,12 +1075,33 @@ def main(argv: list[str] | None = None) -> int:
 
         # -- The workshop -------------------------------------------------
         print(loom_ui.heading(term, "The workshop", "1 of 4"))
-        print(trail(term, "workshop"))
+        print("  " + term.bold("[workshop]") + term.dim("  ·  shared checks for both doors"))
         guidance(term, "The loom checks its own equipment; nothing has run yet.")
         core_ok, docx_ok = run_doctor(term)
         if not core_ok:
             return 2
 
+        door = args.door
+        if door is None:
+            # Compatibility contract: every pre-R1 invocation with a source
+            # remains an Unravel invocation. Only a source-less guided launch
+            # opens the new door chooser.
+            door = (
+                choose_door(term, load_state())
+                if interactive and not args.yes and args.source is None
+                else "unravel"
+            )
+        if door == "q":
+            print("  nothing was run.")
+            return 0
+        remember_last_door(door)
+
+        if door == "weave":
+            saver = lambda values: save_door_state("weave", values)
+            state = door_state(load_state(), "weave")
+            if args.yes:
+                return weave.run_headless(term, args, saver)
+            return weave.run_interactive(term, args, state, saver)
         if args.yes:
             return _run_headless(term, args, docx_ok)
         return _run_interactive(term, args, docx_ok)

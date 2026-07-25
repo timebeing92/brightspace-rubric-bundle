@@ -87,6 +87,7 @@ def main() -> int:
                 str(WEAVE_INPUT),
                 "--output-dir",
                 str(weave_dir),
+                "--force",
                 "--progress-events",
             ]
         )

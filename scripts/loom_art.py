@@ -64,7 +64,7 @@ PALETTE = {
 }
 
 TITLE = "R U B R I C   L O O M"
-SUBTITLE = "Brightspace rubrics  →  readable cloth  ·  the Unravel door"
+SUBTITLE = "Unravel exports  ·  Weave rubric-only import packages"
 
 # The shuttle's row and resting position in SCENE (used by the animation).
 SHUTTLE_ROW = 13

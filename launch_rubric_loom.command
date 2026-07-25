@@ -80,12 +80,13 @@ if [ -t 1 ]; then
 fi
 
 printf "  %b%s%b\n" "$C_ROSE$C_BOLD" "RUBRIC LOOM" "$C_RESET"
-printf "  %b%s%b\n" "$C_DIM" "Brightspace rubrics -> readable cloth" "$C_RESET"
+printf "  %b%s%b\n" "$C_DIM" "Unravel exports · Weave rubric-only import packages" "$C_RESET"
 echo
 printf "%b%s%b\n" "$C_BOLD" "Choose:" "$C_RESET"
-printf "  %b1.%b Open the loom %b(guided wizard; pick or drag a source inside)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
+printf "  %b1.%b Open the loom %b(guided two-door wizard)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
 printf "  %b2.%b Demonstration unravel %b(the pinned synthetic fixture)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
-printf "  %b3.%b Workshop doctor %b(environment checks only)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
+printf "  %b3.%b Demonstration weave %b(explicit-scoring Markdown fixture)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
+printf "  %b4.%b Workshop doctor %b(environment checks only)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
 echo
 read -r -p "Selection [1]: " CHOICE || CHOICE=""
 CHOICE="${CHOICE:-1}"
@@ -93,7 +94,8 @@ CHOICE="${CHOICE:-1}"
 case "$CHOICE" in
   1) ARGS=() ;;
   2) ARGS=("--source" "$REPO_DIR/tests/fixtures/tiny_rubrics_export") ;;
-  3) ARGS=("--doctor") ;;
+  3) ARGS=("--door" "weave" "--source" "$REPO_DIR/tests/fixtures/rubric_authoring/three_level_explicit.md") ;;
+  4) ARGS=("--doctor") ;;
   q|Q) echo "The loom stays idle."; hold_open; exit 0 ;;
   *)
     echo "Unknown selection: $CHOICE"

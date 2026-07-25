@@ -4,7 +4,7 @@ This repository is the portable producer for **Rubric Loom**: one rubric
 service with two doors that converge on the Brightspace rubric dialect
 (`rubrics_d2l.xml`, schemaversion v2011).
 
-- **Unravel** (working now): a Brightspace course export, an unpacked export
+- **Unravel**: a Brightspace course export, an unpacked export
   folder, or a bare `rubrics_d2l.xml` becomes a review workbook, a
   `coursecraft.rubrics/1` JSON document validated against the vendored
   schema, and a reviewer DOCX. One command:
@@ -17,13 +17,20 @@ service with two doors that converge on the Brightspace rubric dialect
   inferred. Add `--progress-events` to stream `coursecraft.progress/1`
   NDJSON for wizard-style consumers.
 
-- **Weave** (present, frame stage): the pinned Workbench builder turns a flat
-  markdown or JSON rubric contract into a rubric-only D2L import package and
-  validates it (`scripts/build_rubric_package.py`,
-  `scripts/validate_rubric_package.py`). The builder is live-import verified
-  upstream, but this repo has not yet productized the door — no orchestrator,
-  no DOCX intake, no round trip from unraveled output. See `ROADMAP.md` R2
-  before extending it.
+- **Weave**: the pinned Workbench producer accepts supported DOCX rubric
+  tables, Markdown tables, `coursecraft.rubric_authoring/1` JSON, eligible
+  `coursecraft.rubrics/1`, and the documented legacy JSON shape. The strict
+  bundle orchestrator preflights, builds, validates, and receipts a
+  rubric-only import package:
+
+  ```bash
+  .venv/bin/python scripts/run_weave_bundle.py rubric.md --preflight
+  .venv/bin/python scripts/run_weave_bundle.py rubric.md \
+    --output-dir output/example__weave_bundle
+  ```
+
+  Missing scoring or weights refuse unless their explicit approval flags are
+  supplied. Nothing is imported, and activity attachment remains manual.
 
 ## Ownership
 
@@ -52,23 +59,23 @@ names survive the loop. The receipt lands in
 `output/synthetic_journey/journey_receipt.json`. See
 `docs/SYNTHETIC_JOURNEY.md`.
 
-## The terminal wizard (Unravel, guided)
+## The terminal wizard (two doors)
 
 ```bash
 .venv/bin/python scripts/rubric_loom_wizard.py
 ```
 
-Or double-click `launch_rubric_loom.command` (macOS): it offers the
-guided loom, a demonstration unravel on the synthetic fixture, and the
-workshop doctor — and on a fresh machine it offers to build the `.venv`
-first via `scripts/bootstrap_env.py`.
+Or double-click `launch_rubric_loom.command` (macOS): one launcher offers the
+guided two-door Loom, demonstrations for both doors, and the workshop doctor.
+On a fresh machine it offers to build the `.venv` first.
 
-The Rubric Loom wizard (roadmap R3) walks the Unravel door in the family
-register: doctor checklist, source pick and peek card, commissioned
-options, a live step board over the orchestrator's real
-`coursecraft.progress/1` events, and a results card whose reviewer DOCX
-is marked "start here". Piped and `--plain` runs stay escape-free;
-`--source PATH --yes` runs it non-interactively. See
+Unravel retains its export peek and review artifacts. Weave invokes producer
+preflight, shows only producer-reported labels and scoring evidence, requires
+a named final approval, and leads with the receipt-grounded import ZIP.
+Both doors share the doctor, terminal kit, progress-event consumer,
+cancellation behavior, plain mode, launcher, and door-isolated remembered
+state. Legacy `--source PATH --yes` remains Unravel. Headless Weave requires
+`--door weave --source PATH --yes --approve-weave`. See
 `docs/RUBRIC_LOOM_WIZARD.md`.
 
 ## Verify the source boundary
@@ -107,10 +114,10 @@ markers. Cutting, tagging, and publishing a release stay operator decisions.
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
 | `scripts/make_release_asset.py` (release machinery) | Working; deterministic asset, sidecar, and manifest — no release cut yet |
 | Pinned extraction scripts + `coursecraft.rubrics/1` schema | Byte-identical to Workbench at the pin commit |
-| Pinned builder scripts (Weave) | Functional CLIs; door not yet productized |
+| `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, six progress steps, validated outputs, final receipt |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
-| Terminal Rubric Wizard | Working Unravel surface; guided source selection, doctor, progress board, results card, plain/headless mode, and macOS launcher |
-| Hosted workshop bench | Trigger-gated; see `ROADMAP.md` R4 |
+| Terminal Rubric Wizard | Working two-door surface; producer preflight, named Weave approval, shared progress board, receipt-grounded results, plain/headless mode, one macOS launcher |
+| Hosted workshop bench | Authorized next consumer; see `ROADMAP.md` R4 |
 
 The ownership decision record is `docs/REPOSITORY_BOUNDARY.md`. The phased
 plan is `ROADMAP.md`. Agent rules are `AGENTS.md`.
