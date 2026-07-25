@@ -42,9 +42,9 @@ The rubric extraction scripts also ship inside `brightspace-blueprint-bundle`
 as part of full blueprint runs; both downstream copies trace to the same
 Workbench source, and fixes land upstream first.
 
-Bundle-only code (the orchestrator, the synthetic journey, release and
-environment mechanics, and the later terminal Rubric Wizard) may be authored
-here. It must not silently fork upstream semantics.
+Bundle-only code (the orchestrators, synthetic journey, release and
+environment mechanics, and terminal Rubric Loom) may be authored here. It
+must not silently fork upstream semantics.
 
 ## Install and run the synthetic proof
 
@@ -99,20 +99,26 @@ review and tests:
 ```
 
 The builder exports one explicit ref (clean tree required; `--allow-dirty`
-builds the named ref anyway), stages `RELEASE_MANIFEST.json`
-(`coursecraft.bundle_release/1`: version, source receipt, contract and
-runtime digests, and the Unravel capability record), writes a reproducible
-`dist/brightspace-rubric-bundle-v<VERSION>.tar.gz`, and drops a matching
-`.sha256` sidecar. The version is read from `VERSION` at that ref, and the
-build refuses to advertise Unravel if the orchestrator has lost its runtime
-markers. Cutting, tagging, and publishing a release stay operator decisions.
+builds the named ref anyway), stages:
+
+- `RELEASE_MANIFEST.json` (`coursecraft.bundle_release/1`) with source,
+  contract and runtime digests plus independent Unravel and Weave capability
+  records;
+- deterministic `SBOM.json` (`coursecraft.bundle_sbom/1`) from
+  `requirements-lock.txt`.
+
+It writes a reproducible `dist/brightspace-rubric-bundle-v<VERSION>.tar.gz`
+and matching `.sha256` sidecar. The version is read from `VERSION` at that
+ref. Unravel and Weave have separate runtime-marker gates; a missing Weave
+producer, pin, TUI, preflight, progress, receipt, or manual-attachment marker
+prevents the release build.
 
 ## Current surface
 
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Working; deterministic asset, sidecar, and manifest — no release cut yet |
+| `scripts/make_release_asset.py` (release machinery) | Working; deterministic asset, sidecar, SBOM, and independent Unravel/Weave capability gates |
 | Pinned extraction scripts + `coursecraft.rubrics/1` schema | Byte-identical to Workbench at the pin commit |
 | `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, six progress steps, validated outputs, final receipt |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |

@@ -101,8 +101,8 @@ release.
   never here. The blueprint bundle's copies of the extraction scripts are
   governed by its own drift maps; this repo's copies are governed by the
   vendor pin. Both trace to the same Workbench commit lineage.
-- The staged share bundle `shareable-rubric-package-builder` remains the
-  colleague-facing hand-off surface until this repo reaches R2; do not
-  duplicate its diverged library here in the meantime.
-- License posture stays private-scaffold until the operator chooses a
-  license at first public release (`LICENSE_POSTURE.md`).
+- The former staged share bundle remains historical evidence. Canonical
+  producer changes land in Workbench and arrive here only through the exact
+  vendor pin; no downstream semantic fork is permitted.
+- The repository is licensed under AGPL-3.0-or-later as chosen for the v1.0.0
+  public release; `LICENSE_POSTURE.md` records that decision.

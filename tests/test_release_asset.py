@@ -1,4 +1,4 @@
-"""Release-asset machinery: determinism, receipts, and the Unravel door gate.
+"""Release machinery: determinism, SBOM, receipts, and independent door gates.
 
 The end-to-end assertions run against a scratch git repository shaped like this
 bundle (VERSION, the two vendored schemas, the orchestrator and its extraction
@@ -31,6 +31,15 @@ SCRATCH_REMOTE = "git@github.com:example/brightspace-rubric-bundle.git"
 SCRATCH_VERSION = "9.9.9"
 SCRATCH_RELEASE_NAME = f"brightspace-rubric-bundle-v{SCRATCH_VERSION}"
 WORKSHOP_MARKER = "scripts/run_rubric_bundle.py"
+WEAVE_MARKER = "scripts/run_weave_bundle.py"
+PIN_TARGETS = tuple(
+    entry["target"]
+    for entry in json.loads(
+        (REPO_ROOT / "upstream" / "workbench_pin.json").read_text(
+            encoding="utf-8"
+        )
+    )["files"]
+)
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -69,9 +78,16 @@ def scratch_bundle(tmp_path: Path) -> Path:
     repo.mkdir()
     (repo / "VERSION").write_text(f"{SCRATCH_VERSION}\n", encoding="utf-8")
     (repo / "README.md").write_text("Synthetic scratch bundle.\n", encoding="utf-8")
-    for relative in (MODULE_PATH.relative_to(REPO_ROOT).as_posix(),) + tuple(
-        release.RUNTIME_FILES
-    ) + tuple(release.CONTRACT_FILES):
+    files = tuple(
+        dict.fromkeys(
+            (MODULE_PATH.relative_to(REPO_ROOT).as_posix(),)
+            + tuple(release.RUNTIME_FILES)
+            + tuple(release.CONTRACT_FILES)
+            + (release.REQUIREMENTS_LOCK,)
+            + PIN_TARGETS
+        )
+    )
+    for relative in files:
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO_ROOT / relative, target)
@@ -115,6 +131,33 @@ def test_remote_normalization_removes_credentials() -> None:
         release.normalized_remote(SCRATCH_REMOTE)
         == "https://github.com/example/brightspace-rubric-bundle.git"
     )
+    assert (
+        release.normalized_remote("git@github.com:example/repo.git?token=SECRET")
+        == "https://github.com/example/repo.git"
+    )
+    assert (
+        release.normalized_remote(
+            "https://github.com/example/repo.git?access_token=SECRET#private"
+        )
+        == "https://github.com/example/repo.git"
+    )
+    assert (
+        release.normalized_remote("ssh://git@github.com/example/repo.git")
+        == "https://github.com/example/repo.git"
+    )
+    assert (
+        release.normalized_remote("file:///Users/alice/Secret/project.git")
+        == "local:project.git"
+    )
+    assert release.normalized_remote("/Users/alice/Secret/project") == "local:project"
+    assert (
+        release.normalized_remote(r"C:\Users\alice\Secret\project.git")
+        == "local:project.git"
+    )
+    assert (
+        release.normalized_remote("opaque://token@secret.example/private")
+        == "local:repository"
+    )
 
 
 def test_normalized_archive_is_reproducible(tmp_path: Path) -> None:
@@ -136,7 +179,9 @@ def test_contract_receipt_records_schema_ids_and_hashes() -> None:
     rows = release.contract_receipt(REPO_ROOT)
     assert [row["schema"] for row in rows] == [
         "coursecraft.rubrics/1",
+        "coursecraft.rubric_authoring/1",
         "coursecraft.progress/1",
+        "coursecraft.run/1",
     ]
     assert [row["path"] for row in rows] == list(release.CONTRACT_FILES)
     for row in rows:
@@ -146,12 +191,7 @@ def test_contract_receipt_records_schema_ids_and_hashes() -> None:
 
 def test_runtime_receipt_and_unravel_capability() -> None:
     rows = release.runtime_receipt(REPO_ROOT)
-    assert [row["path"] for row in rows] == [
-        "scripts/run_rubric_bundle.py",
-        "scripts/extract_rubrics_to_workbook.py",
-        "scripts/rubrics_to_docx.py",
-        "scripts/common_xml.py",
-    ]
+    assert [row["path"] for row in rows] == list(release.RUNTIME_FILES)
     for row in rows:
         expected = hashlib.sha256((REPO_ROOT / row["path"]).read_bytes()).hexdigest()
         assert row["sha256"] == expected
@@ -178,6 +218,47 @@ def test_runtime_receipt_and_unravel_capability() -> None:
         "Validate rubric contract",
         "Render rubric review DOCX",
     ]
+    assert capability["runtime_files"] == list(release.UNRAVEL_RUNTIME_FILES)
+
+
+def test_weave_capability_is_independent_and_exact() -> None:
+    capability = release.release_capabilities(REPO_ROOT)["weave"]
+    assert capability["status"] == "enabled"
+    assert capability["entry_point"] == WEAVE_MARKER
+    assert capability["terminal_entry_point"] == "scripts/rubric_loom_wizard.py"
+    assert capability["source_forms"] == [
+        "docx_rubric_table",
+        "markdown_rubric_table",
+        "coursecraft.rubric_authoring/1_json",
+        "eligible_coursecraft.rubrics/1_json",
+        "legacy_builder_json",
+    ]
+    assert capability["authoring_contract"] == "coursecraft.rubric_authoring/1"
+    assert capability["eligible_extraction_contract"] == "coursecraft.rubrics/1"
+    assert capability["run_contract"] == "coursecraft.run/1"
+    assert capability["progress_schema"] == "coursecraft.progress/1"
+    assert capability["steps"] == list(release.WEAVE_STEPS)
+    assert capability["exit_codes"] == release.WEAVE_EXIT_CODES
+    assert capability["activity_attachment"] == "manual_only"
+    assert capability["producer_pin"]["source_commit"] == (
+        "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+    )
+    assert capability["runtime_files"] == list(release.WEAVE_RUNTIME_FILES)
+    assert capability["terminal_runtime_files"] == list(
+        release.TERMINAL_RUNTIME_FILES + release.INSTALL_RUNTIME_FILES
+    )
+    assert "scripts/bootstrap_env.py" in capability["terminal_runtime_files"]
+    assert "requirements-dev.txt" in capability["terminal_runtime_files"]
+    outputs = {item["key"]: item for item in capability["output_artifacts"]}
+    assert outputs["import_zip"] == {
+        "key": "import_zip",
+        "path": "rubric_package.zip",
+        "role": "rubric_import_package",
+        "required": True,
+        "primary": True,
+    }
+    assert outputs["review_report"]["required"] is False
+    assert outputs["run_identity"]["path"] == "run_receipt.json"
 
 
 def test_unravel_capability_requires_runtime_markers(tmp_path: Path) -> None:
@@ -187,6 +268,29 @@ def test_unravel_capability_requires_runtime_markers(tmp_path: Path) -> None:
         path.write_text("placeholder\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="lacks Unravel release markers"):
         release.release_capabilities(tmp_path)
+
+
+def test_sbom_is_deterministic_and_lock_grounded(tmp_path: Path) -> None:
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    shutil.copyfile(REPO_ROOT / release.REQUIREMENTS_LOCK, first_root / release.REQUIREMENTS_LOCK)
+    shutil.copyfile(REPO_ROOT / release.REQUIREMENTS_LOCK, second_root / release.REQUIREMENTS_LOCK)
+    first = release.write_sbom(first_root)
+    second = release.write_sbom(second_root)
+    assert first.read_bytes() == second.read_bytes()
+    payload = json.loads(first.read_text(encoding="utf-8"))
+    assert payload["schema"] == release.SBOM_SCHEMA
+    assert payload["component_count"] == len(payload["components"]) == 10
+    assert payload["source"]["sha256"] == release.sha256_file(
+        REPO_ROOT / release.REQUIREMENTS_LOCK
+    )
+    assert payload["components"][0] == {
+        "name": "attrs",
+        "version": "26.1.0",
+        "purl": "pkg:pypi/attrs@26.1.0",
+    }
 
 
 def test_dirty_tree_is_refused_until_allow_dirty(scratch_bundle: Path) -> None:
@@ -226,6 +330,27 @@ def test_sidecar_records_the_checksum_and_asset_name(scratch_bundle: Path) -> No
     assert release.sha256_file(asset) == summary["asset_sha256"]
 
 
+def test_release_output_symlink_is_refused_without_touching_target(
+    scratch_bundle: Path,
+) -> None:
+    output_dir = scratch_bundle.parent / "dist-symlink"
+    output_dir.mkdir()
+    sentinel = scratch_bundle.parent / "SENTINEL"
+    sentinel.write_text("keep", encoding="utf-8")
+    asset = output_dir / f"{SCRATCH_RELEASE_NAME}.tar.gz"
+    asset.symlink_to(sentinel)
+    result = build_asset(
+        scratch_bundle,
+        "--ref",
+        "HEAD",
+        "--output-dir",
+        str(output_dir),
+    )
+    assert result.returncode != 0
+    assert "refusing symlinked release output" in result.stderr
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
 def test_manifest_and_layout_carry_the_release_identity(scratch_bundle: Path) -> None:
     commit = git(scratch_bundle, "rev-parse", "HEAD").stdout.strip()
     summary = build_ok(scratch_bundle, scratch_bundle.parent / "dist")
@@ -238,7 +363,9 @@ def test_manifest_and_layout_carry_the_release_identity(scratch_bundle: Path) ->
             assert not (member.issym() or member.islnk())
             names.add(member.name)
     assert f"{SCRATCH_RELEASE_NAME}/{WORKSHOP_MARKER}" in names
+    assert f"{SCRATCH_RELEASE_NAME}/{WEAVE_MARKER}" in names
     assert f"{SCRATCH_RELEASE_NAME}/RELEASE_MANIFEST.json" in names
+    assert f"{SCRATCH_RELEASE_NAME}/{release.SBOM_PATH}" in names
 
     manifest = json.loads(
         (staged / SCRATCH_RELEASE_NAME / "RELEASE_MANIFEST.json").read_text(
@@ -254,12 +381,19 @@ def test_manifest_and_layout_carry_the_release_identity(scratch_bundle: Path) ->
     }
     assert [row["schema"] for row in manifest["contracts"]] == [
         "coursecraft.rubrics/1",
+        "coursecraft.rubric_authoring/1",
         "coursecraft.progress/1",
+        "coursecraft.run/1",
     ]
     assert [row["path"] for row in manifest["runtime_files"]] == list(
         release.RUNTIME_FILES
     )
     assert manifest["capabilities"]["unravel"]["status"] == "enabled"
+    assert manifest["capabilities"]["weave"]["status"] == "enabled"
+    assert manifest["sbom"]["schema"] == release.SBOM_SCHEMA
+    sbom_path = staged / SCRATCH_RELEASE_NAME / release.SBOM_PATH
+    assert manifest["sbom"]["sha256"] == release.sha256_file(sbom_path)
+    assert manifest["sbom"]["component_count"] == 10
 
 
 def test_asset_satisfies_the_workshop_fetch_checks(scratch_bundle: Path) -> None:
@@ -320,6 +454,48 @@ def test_build_refuses_a_bundle_missing_an_unravel_marker(
     assert result.returncode != 0
     assert "lacks Unravel release markers" in result.stderr
     assert "--progress-events" in result.stderr
+    assert not list(output_dir.glob("*.tar.gz"))
+
+
+def test_build_refuses_a_bundle_missing_a_weave_marker(
+    scratch_bundle: Path,
+) -> None:
+    orchestrator = scratch_bundle / WEAVE_MARKER
+    orchestrator.write_text(
+        orchestrator.read_text(encoding="utf-8").replace(
+            "--preflight", "--inspect-only"
+        ),
+        encoding="utf-8",
+    )
+    commit_all(scratch_bundle, "strip the Weave preflight marker")
+
+    output_dir = scratch_bundle.parent / "dist-stripped-weave"
+    result = build_asset(
+        scratch_bundle, "--ref", "HEAD", "--output-dir", str(output_dir)
+    )
+    assert result.returncode != 0
+    assert "lacks Weave release markers" in result.stderr
+    assert "--preflight" in result.stderr
+    assert not list(output_dir.glob("*.tar.gz"))
+
+
+def test_build_refuses_weave_runtime_drift_from_the_pin(
+    scratch_bundle: Path,
+) -> None:
+    producer = scratch_bundle / "scripts" / "rubric_authoring.py"
+    producer.write_text(
+        producer.read_text(encoding="utf-8") + "\n# unauthorized drift\n",
+        encoding="utf-8",
+    )
+    commit_all(scratch_bundle, "drift the pinned Weave producer")
+
+    output_dir = scratch_bundle.parent / "dist-drifted-weave"
+    result = build_asset(
+        scratch_bundle, "--ref", "HEAD", "--output-dir", str(output_dir)
+    )
+    assert result.returncode != 0
+    assert "does not match its Workbench pin" in result.stderr
+    assert "scripts/rubric_authoring.py" in result.stderr
     assert not list(output_dir.glob("*.tar.gz"))
 
 
