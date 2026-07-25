@@ -85,11 +85,27 @@ review and tests:
 .venv/bin/python scripts/vendor_from_workbench.py --update-pin --workbench ../coursecraft_workbench --ref <reviewed-commit>
 ```
 
+## Build a release asset
+
+```bash
+.venv/bin/python scripts/make_release_asset.py --ref <tag-or-commit>
+```
+
+The builder exports one explicit ref (clean tree required; `--allow-dirty`
+builds the named ref anyway), stages `RELEASE_MANIFEST.json`
+(`coursecraft.bundle_release/1`: version, source receipt, contract and
+runtime digests, and the Unravel capability record), writes a reproducible
+`dist/brightspace-rubric-bundle-v<VERSION>.tar.gz`, and drops a matching
+`.sha256` sidecar. The version is read from `VERSION` at that ref, and the
+build refuses to advertise Unravel if the orchestrator has lost its runtime
+markers. Cutting, tagging, and publishing a release stay operator decisions.
+
 ## Current surface
 
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
+| `scripts/make_release_asset.py` (release machinery) | Working; deterministic asset, sidecar, and manifest — no release cut yet |
 | Pinned extraction scripts + `coursecraft.rubrics/1` schema | Byte-identical to Workbench at the pin commit |
 | Pinned builder scripts (Weave) | Functional CLIs; door not yet productized |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
