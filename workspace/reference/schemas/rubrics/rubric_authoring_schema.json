@@ -1,0 +1,178 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "coursecraft.rubric_authoring/1",
+  "title": "CourseCraft Rubric Authoring Contract",
+  "description": "Runnable, provenance-bearing rubric authoring contract used to build Brightspace rubric-only import packages. Unlike coursecraft.rubrics/1, this contract contains explicit scoring decisions.",
+  "type": "object",
+  "required": [
+    "schema",
+    "package",
+    "source",
+    "approvals",
+    "rubrics",
+    "diagnostics",
+    "notes",
+    "extensions"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "diagnostic": {
+      "type": "object",
+      "required": ["id", "code", "severity", "message", "location", "remediation", "extensions"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^diag-[0-9]{4}$"},
+        "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]+$"},
+        "severity": {"enum": ["info", "warning", "error"]},
+        "message": {"type": "string", "minLength": 1},
+        "location": {"type": "string", "minLength": 1},
+        "remediation": {"type": "string", "minLength": 1},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "level": {
+      "type": "object",
+      "required": ["name", "sort_order", "multiplier", "score_source", "extensions"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "sort_order": {"type": "integer", "minimum": 1},
+        "multiplier": {"type": "number", "minimum": 0, "maximum": 1},
+        "score_source": {
+          "enum": [
+            "explicit_level_metadata",
+            "overall_threshold_metadata",
+            "numeric_level_header",
+            "approved_even_spacing",
+            "extracted_cell_points"
+          ]
+        },
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": [
+        "name",
+        "sort_order",
+        "weight",
+        "weight_source",
+        "descriptions",
+        "extensions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "sort_order": {"type": "integer", "minimum": 1},
+        "weight": {"type": "number", "exclusiveMinimum": 0},
+        "weight_source": {
+          "enum": ["explicit_weight", "approved_equal_weights", "extracted_cell_points"]
+        },
+        "descriptions": {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {"type": "string", "minLength": 1}
+        },
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "threshold": {
+      "type": "object",
+      "required": ["name", "sort_order", "range_start_value", "source", "extensions"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "sort_order": {"type": "integer", "minimum": 1},
+        "range_start_value": {"type": "number", "minimum": 0, "maximum": 100},
+        "source": {
+          "enum": [
+            "explicit_overall_threshold",
+            "derived_from_level_multiplier",
+            "extracted_overall_threshold"
+          ]
+        },
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    }
+  },
+  "properties": {
+    "schema": {"const": "coursecraft.rubric_authoring/1"},
+    "package": {
+      "type": "object",
+      "required": [
+        "manifest_identifier",
+        "resource_prefix",
+        "rubric_id_start",
+        "resource_code_start",
+        "level_id_base_start"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "manifest_identifier": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+        "resource_prefix": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+        "rubric_id_start": {"type": "integer", "minimum": 1},
+        "resource_code_start": {"type": "integer", "minimum": 1},
+        "level_id_base_start": {"type": "integer", "minimum": 1},
+        "orgunit": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["media_kind", "label", "sha256", "adapter", "extensions"],
+      "additionalProperties": false,
+      "properties": {
+        "media_kind": {"enum": ["docx", "markdown", "json"]},
+        "label": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "adapter": {
+          "enum": [
+            "docx_table",
+            "markdown_table",
+            "coursecraft.rubric_authoring/1",
+            "legacy_builder_json",
+            "coursecraft.rubrics/1"
+          ]
+        },
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "required": ["even_spacing", "equal_weights"],
+      "additionalProperties": false,
+      "properties": {
+        "even_spacing": {"type": "boolean"},
+        "equal_weights": {"type": "boolean"}
+      }
+    },
+    "rubrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "source_reference",
+          "levels",
+          "criteria",
+          "overall_levels",
+          "extensions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "minLength": 1},
+          "source_reference": {"type": ["string", "null"]},
+          "levels": {"type": "array", "minItems": 2, "items": {"$ref": "#/definitions/level"}},
+          "criteria": {"type": "array", "minItems": 1, "items": {"$ref": "#/definitions/criterion"}},
+          "overall_levels": {"type": "array", "minItems": 2, "items": {"$ref": "#/definitions/threshold"}},
+          "extensions": {"type": "object", "additionalProperties": true}
+        }
+      }
+    },
+    "diagnostics": {"type": "array", "items": {"$ref": "#/definitions/diagnostic"}},
+    "notes": {"type": "array", "items": {"type": "string"}},
+    "extensions": {"type": "object", "additionalProperties": true}
+  }
+}

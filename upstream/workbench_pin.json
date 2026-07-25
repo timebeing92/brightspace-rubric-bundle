@@ -2,8 +2,8 @@
   "schema": "coursecraft.workbench_vendor_pin/1",
   "source_repository": "https://github.com/timebeing92/coursecraft-workbench.git",
   "source_branch": "main",
-  "source_commit": "5f1b78b3da8d1e5701ffff4e302b8503b6cd17f6",
-  "source_committed_at": "2026-07-20T22:19:07-04:00",
+  "source_commit": "7c5140545548c89a254ac4502cfdd7ee6fb44255",
+  "source_committed_at": "2026-07-25T16:22:21-04:00",
   "policy": "byte-identical mechanical promotion; behavior changes upstream first",
   "files": [
     {
@@ -32,9 +32,19 @@
       "sha256": "d901b7dd2cd85fcaf57243b89bfb8497872f575dc658813e3c9ed355f6ae180e"
     },
     {
+      "source": "scripts/make_rubric_package.py",
+      "target": "scripts/make_rubric_package.py",
+      "sha256": "551f237c47e5d0d1ab5eaccbd6f9f770654d33482d0f8d2e6323597e9a873d75"
+    },
+    {
+      "source": "scripts/rubric_authoring.py",
+      "target": "scripts/rubric_authoring.py",
+      "sha256": "47fcb8466cec418762efa3435ca7ebe25a5e596105fb477f5d2477813235ded8"
+    },
+    {
       "source": "scripts/rubric_package_lib.py",
       "target": "scripts/rubric_package_lib.py",
-      "sha256": "6c4198fb55ca5f023fd2a8eb1959aa2feaa3422e8f93b9a40b5b606ae1a723c8"
+      "sha256": "631c484c4db8b502db4f26a1be881a8b2b459fd3098480b46135c40181df55e3"
     },
     {
       "source": "scripts/rubrics_to_docx.py",
@@ -45,6 +55,26 @@
       "source": "scripts/validate_rubric_package.py",
       "target": "scripts/validate_rubric_package.py",
       "sha256": "68f34a721d48a555087050ccb0355f6b0c70b836a79fa6f99c1f62c3b319a458"
+    },
+    {
+      "source": "tests/fixtures/rubric_authoring/eligible_extraction.json",
+      "target": "tests/fixtures/rubric_authoring/eligible_extraction.json",
+      "sha256": "da8c7b2b03ee4ca5e0780b50648e111f8839ff569785c09039caf2aeb1e0f1fc"
+    },
+    {
+      "source": "tests/fixtures/rubric_authoring/inconsistent_extraction.json",
+      "target": "tests/fixtures/rubric_authoring/inconsistent_extraction.json",
+      "sha256": "10757a6f48ac57ef3af80b651e84c74789b530b484a62cc554be6d5020cd95e7"
+    },
+    {
+      "source": "tests/fixtures/rubric_authoring/missing_scoring_and_weights.md",
+      "target": "tests/fixtures/rubric_authoring/missing_scoring_and_weights.md",
+      "sha256": "92701d86e4f8869d173c1bc843f19bae2ad6f500a622853724618d5b074c6ec2"
+    },
+    {
+      "source": "tests/fixtures/rubric_authoring/three_level_explicit.md",
+      "target": "tests/fixtures/rubric_authoring/three_level_explicit.md",
+      "sha256": "f10d64c0a5d27cfa8d6c9d4225676eec1bff645d0eeac6ae87f9815186679f9a"
     },
     {
       "source": "tests/fixtures/rubric_package/context/reference_course_shell/README.md",
@@ -97,14 +127,29 @@
       "sha256": "4071c3c6805a2d65dceb1fbcaab555f643d70de8f0893412691fe9ce29d045df"
     },
     {
+      "source": "tests/test_rubric_authoring.py",
+      "target": "tests/test_rubric_authoring.py",
+      "sha256": "bd0817950f84c5aa758a54f50818aea700f6a02d4423a2e9652fe24465b2fda9"
+    },
+    {
       "source": "tests/test_rubric_package_builder.py",
       "target": "tests/test_rubric_package_builder.py",
       "sha256": "ae570f1f43466c56cfa115d643b08e8337e3e29071831b0f355550d855160c6b"
     },
     {
-      "source": "workspace/generated/shareable-brightspace-blueprint-bundle/schemas/progress_events_schema.json",
-      "target": "workspace/reference/schemas/progress/progress_events_schema.json",
-      "sha256": "7588cf71eecebcadfe56f07ceb3eb77b748ba6fd601765ec2f3658a2a5dca5c0"
+      "source": "workspace/reference/schemas/course/run_identity_schema.json",
+      "target": "workspace/reference/schemas/course/run_identity_schema.json",
+      "sha256": "d6477e72881b4ca2a6c182f110c9cba300949f3176c1898605491449b0c7de3d"
+    },
+    {
+      "source": "workspace/reference/schemas/rubrics/README.md",
+      "target": "workspace/reference/schemas/rubrics/README.md",
+      "sha256": "bc56bec956c628e32f7af566b09e63a5e5b0e0f70738cffaf2174c136a7fee31"
+    },
+    {
+      "source": "workspace/reference/schemas/rubrics/rubric_authoring_schema.json",
+      "target": "workspace/reference/schemas/rubrics/rubric_authoring_schema.json",
+      "sha256": "c070492da7996570a2d0c692f0bc29c7cc6f9053df6e0bff6333487292eaf613"
     },
     {
       "source": "workspace/reference/schemas/rubrics/rubrics_schema.json",

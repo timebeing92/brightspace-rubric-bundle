@@ -231,6 +231,48 @@
                 "null"
               ],
               "description": "Portable coursecraft.run/1 source, producer, contract, step, and checksum receipt"
+            },
+            "import_zip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Rubric-only Brightspace import package emitted by Weave"
+            },
+            "rubrics_xml": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Top-level rubrics_d2l.xml emitted by Weave"
+            },
+            "normalized_authoring_json": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Normalized coursecraft.rubric_authoring/1 artifact"
+            },
+            "mapping_report": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Human-readable source-to-rubric mapping report"
+            },
+            "review_report": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Optional DOCX conversion review report"
+            },
+            "diagnostics_json": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Machine-readable Weave diagnostics"
             }
           }
         },

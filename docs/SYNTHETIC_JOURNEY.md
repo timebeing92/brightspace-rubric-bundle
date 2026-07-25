@@ -5,15 +5,14 @@ each other on purely synthetic fixture content, and writes a receipt.
 
 ## What it does
 
-1. **Weave** — builds a rubric-only D2L import package from the pinned flat
-   markdown fixture
-   (`tests/fixtures/rubric_package/input/rubrics_flat.example.md`) with the
-   pinned reference course shell as context, using the pinned Workbench
-   builder.
+1. **Weave** — invokes `run_weave_bundle.py` over the explicit three-level
+   Markdown fixture
+   (`tests/fixtures/rubric_authoring/three_level_explicit.md`), consumes its
+   real progress events, and records the final `coursecraft.run/1`.
 2. **Validate** — runs the pinned package validator; the package must report
    `VALID`.
-3. **Unravel** — points `run_rubric_bundle.py` at the woven package
-   directory; extraction, `coursecraft.rubrics/1` validation, and the DOCX
+3. **Unravel** — points `run_rubric_bundle.py` at the woven import ZIP;
+   extraction, `coursecraft.rubrics/1` validation, and the DOCX
    render must all succeed.
 4. **Loop check** — the rubric names in the builder's normalized contract
    must exactly match the names in the unraveled document.

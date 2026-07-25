@@ -23,28 +23,26 @@ SOURCE_FILES = (
     "scripts/extract_course_context.py",
     "scripts/extract_rubrics_to_workbook.py",
     "scripts/flat_markdown_to_json.py",
+    "scripts/make_rubric_package.py",
+    "scripts/rubric_authoring.py",
     "scripts/rubric_package_lib.py",
     "scripts/rubrics_to_docx.py",
     "scripts/validate_rubric_package.py",
     "tests/test_extract_rubrics_to_workbook.py",
+    "tests/test_rubric_authoring.py",
     "tests/test_rubric_package_builder.py",
-    "workspace/generated/shareable-brightspace-blueprint-bundle/schemas/progress_events_schema.json",
+    "workspace/reference/schemas/course/run_identity_schema.json",
+    "workspace/reference/schemas/rubrics/rubric_authoring_schema.json",
 )
 
 SOURCE_TREES = (
     "tests/fixtures/rubric_package",
+    "tests/fixtures/rubric_authoring",
     "tests/fixtures/tiny_rubrics_export",
     "workspace/reference/schemas/rubrics",
 )
 
-# The progress-events contract is authored bundle-side in the blueprint bundle;
-# the Workbench retains a byte-identical staged copy, which is the pin source.
-# It lands here under the reference-schema tree like every other contract.
-RENAMED_SOURCES = {
-    "workspace/generated/shareable-brightspace-blueprint-bundle/schemas/progress_events_schema.json": (
-        "workspace/reference/schemas/progress/progress_events_schema.json"
-    ),
-}
+RENAMED_SOURCES: dict[str, str] = {}
 
 
 class PromotionError(RuntimeError):

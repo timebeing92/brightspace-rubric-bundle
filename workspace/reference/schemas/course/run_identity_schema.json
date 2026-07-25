@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "coursecraft.run/1",
+  "title": "CourseCraft Producer Run Identity",
+  "description": "Portable producer receipt connecting source identity, software identity, contract versions, step outcomes, and emitted artifact checksums.",
+  "type": "object",
+  "required": [
+    "schema", "run_id", "status", "started_at", "finished_at", "source",
+    "producer", "contracts", "parameters", "steps", "emitted_files",
+    "receipt_path", "diagnostics", "extensions"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {"const": "coursecraft.run/1"},
+    "run_id": {"type": "string", "pattern": "^cc:run:"},
+    "status": {"enum": ["ok", "partial", "error"]},
+    "started_at": {"type": ["string", "null"]},
+    "finished_at": {"type": ["string", "null"]},
+    "source": {"$ref": "#/definitions/sourceIdentity"},
+    "producer": {"$ref": "#/definitions/producer"},
+    "contracts": {"type": "array", "items": {"$ref": "#/definitions/contractReceipt"}},
+    "parameters": {"type": "object", "additionalProperties": true},
+    "steps": {"type": "array", "items": {"$ref": "#/definitions/step"}},
+    "emitted_files": {"type": "array", "items": {"$ref": "#/definitions/artifact"}},
+    "receipt_path": {"type": "string", "minLength": 1},
+    "diagnostics": {"type": "array", "items": {"oneOf": [{"type": "string"}, {"type": "object", "additionalProperties": true}]}},
+    "extensions": {"type": "object", "additionalProperties": true}
+  },
+  "definitions": {
+    "fingerprint": {
+      "type": "object",
+      "required": ["algorithm", "digest", "scope", "bytes", "extensions"],
+      "additionalProperties": true,
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "scope": {"type": "string", "minLength": 1},
+        "file_count": {"type": "integer", "minimum": 0},
+        "bytes": {"type": "integer", "minimum": 0},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "required": [
+        "source_lineage_key", "source_instance_key", "lineage_state",
+        "lineage_basis", "source_name", "logical_fingerprint",
+        "transport_fingerprint", "observed_identity", "extensions"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "source_lineage_key": {"type": "string", "pattern": "^cc:lineage:"},
+        "source_instance_key": {"type": "string", "pattern": "^cc:source:"},
+        "lineage_state": {"enum": ["resolved", "unresolved"]},
+        "lineage_basis": {"type": "string", "minLength": 1},
+        "source_name": {"type": "string"},
+        "logical_fingerprint": {"$ref": "#/definitions/fingerprint"},
+        "transport_fingerprint": {"oneOf": [{"$ref": "#/definitions/fingerprint"}, {"type": "null"}]},
+        "observed_identity": {"type": "object", "additionalProperties": true},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "producer": {
+      "type": "object",
+      "required": ["component", "identity_state", "version", "repository", "ref", "commit", "dirty", "extensions"],
+      "additionalProperties": true,
+      "properties": {
+        "component": {"type": "string", "minLength": 1},
+        "identity_state": {"enum": ["release", "git", "unknown"]},
+        "version": {"type": ["string", "null"]},
+        "repository": {"type": ["string", "null"]},
+        "ref": {"type": ["string", "null"]},
+        "commit": {"type": ["string", "null"]},
+        "dirty": {"type": ["boolean", "null"]},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "contractReceipt": {
+      "type": "object",
+      "required": ["schema", "schema_path", "sha256", "extensions"],
+      "additionalProperties": true,
+      "properties": {
+        "schema": {"type": "string", "minLength": 1},
+        "schema_path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["name", "status", "started_at", "finished_at", "artifact_paths", "diagnostic_ids", "notes", "extensions"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "status": {"enum": ["completed", "skipped", "failed", "unresolved"]},
+        "started_at": {"type": ["string", "null"]},
+        "finished_at": {"type": ["string", "null"]},
+        "artifact_paths": {"type": "array", "items": {"type": "string"}},
+        "diagnostic_ids": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "bytes", "sha256", "media_type", "contract", "extensions"],
+      "additionalProperties": true,
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "not": {"pattern": "(^/|(^|/)\\.\\.(/|$))"}},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "media_type": {"type": "string", "minLength": 1},
+        "contract": {"type": ["string", "null"]},
+        "extensions": {"type": "object", "additionalProperties": true}
+      }
+    }
+  }
+}

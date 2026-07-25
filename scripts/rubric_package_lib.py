@@ -17,13 +17,22 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
 LEVEL_MULTIPLIERS = [
     ("Advanced", 1.0),
     ("Proficient", 0.9),
     ("Developing", 0.75),
     ("Needs Improvement", 0.0),
+]
+DEFAULT_LEVELS = [
+    {
+        "name": name,
+        "multiplier": multiplier,
+        "sort_order": index,
+        "score_source": "legacy_default",
+    }
+    for index, (name, multiplier) in enumerate(LEVEL_MULTIPLIERS, start=1)
 ]
 OVERALL_LEVELS = [
     ("Needs Improvement", 4),
@@ -737,8 +746,11 @@ def build_rubrics_xml(contract: dict[str, Any]) -> ET.Element:
         levels = ET.SubElement(level_set, "levels")
 
         level_ids: dict[str, str] = {}
-        base_level_id = level_id_base_start + ((offset + 1) * 10)
-        for level_offset, (level_name, _) in enumerate(LEVEL_MULTIPLIERS, start=1):
+        rubric_levels = rubric.get("levels") or DEFAULT_LEVELS
+        level_stride = 100 if contract.get("schema") == "coursecraft.rubric_authoring/1" else 10
+        base_level_id = level_id_base_start + ((offset + 1) * level_stride)
+        for level_offset, level in enumerate(rubric_levels, start=1):
+            level_name = str(level["name"])
             level_id = str(base_level_id + level_offset)
             level_ids[level_name] = level_id
             ET.SubElement(
@@ -746,7 +758,7 @@ def build_rubrics_xml(contract: dict[str, Any]) -> ET.Element:
                 "level",
                 {
                     "name": level_name,
-                    "sort_order": str(level_offset),
+                    "sort_order": str(level.get("sort_order", level_offset)),
                     "level_id": level_id,
                 },
             )
@@ -762,7 +774,10 @@ def build_rubrics_xml(contract: dict[str, Any]) -> ET.Element:
                 },
             )
             cells = ET.SubElement(criterion_el, "cells")
-            for level_name, multiplier in LEVEL_MULTIPLIERS:
+            descriptions = criterion.get("descriptions", criterion.get("levels", {}))
+            for level in rubric_levels:
+                level_name = str(level["name"])
+                multiplier = float(level["multiplier"])
                 cell = ET.SubElement(
                     cells,
                     "cell",
@@ -772,7 +787,7 @@ def build_rubrics_xml(contract: dict[str, Any]) -> ET.Element:
                     },
                 )
                 description = ET.SubElement(cell, "description", {"text_type": "text/html"})
-                ET.SubElement(description, "text").text = criterion["levels"][level_name]
+                ET.SubElement(description, "text").text = descriptions[level_name]
                 add_empty_text_node(cell, "feedback", "text")
 
         overall_level_set = ET.SubElement(rubric_el, "overall_level_set")
@@ -873,6 +888,41 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def assert_safe_replace_target(
+    output_dir: Path,
+    *,
+    protected_sources: tuple[Path, ...] = (),
+) -> Path:
+    """Fail closed before recursively replacing a caller-selected directory."""
+
+    raw_output = output_dir.expanduser()
+    for candidate in (raw_output, *raw_output.parents):
+        if candidate.exists() and candidate.is_symlink():
+            raise ValueError("Refusing a symlinked output path.")
+    resolved = raw_output.resolve(strict=False)
+    repo_root = Path(__file__).resolve().parents[1]
+    protected_roots = {
+        Path("/").resolve(),
+        Path("/tmp").resolve(),
+        Path("/private/tmp").resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+        repo_root,
+        repo_root.parent.resolve(),
+        Path.cwd().resolve(),
+        Path.home().resolve(),
+        Path.home().parent.resolve(),
+    }
+    if resolved in protected_roots:
+        raise ValueError("Refusing a protected output anchor; choose a dedicated leaf directory.")
+    for source_path in protected_sources:
+        source = source_path.expanduser().resolve()
+        if source == resolved or source.is_relative_to(resolved):
+            raise ValueError(
+                "Refusing output target because it contains an input or context source."
+            )
+    return resolved
+
+
 def build_mapping_markdown(contract: dict[str, Any]) -> str:
     lines = [
         "# Rubric Mapping",
@@ -912,10 +962,20 @@ def build_mapping_markdown(contract: dict[str, Any]) -> str:
 
 
 def zip_package(package_dir: Path, zip_path: Path) -> None:
+    """Write a byte-stable rubric package archive.
+
+    The fixed timestamp and permissions are part of the portable producer
+    contract.  Callers remain responsible for constraining package members.
+    """
     with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
         for path in sorted(package_dir.rglob("*")):
             if path.is_file():
-                zf.write(path, arcname=path.relative_to(package_dir))
+                arcname = path.relative_to(package_dir).as_posix()
+                info = ZipInfo(arcname, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = ZIP_DEFLATED
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                zf.writestr(info, path.read_bytes())
 
 
 def build_package(
@@ -925,6 +985,11 @@ def build_package(
     cli_overrides: dict[str, str] | None = None,
     force: bool = False,
 ) -> dict[str, Path]:
+    protected_sources = (input_path,) + ((context_dir,) if context_dir is not None else ())
+    output_dir = assert_safe_replace_target(
+        output_dir,
+        protected_sources=protected_sources,
+    )
     if output_dir.exists():
         if not force:
             raise ValueError(f"Output directory already exists: {output_dir}. Re-run with --force to replace it.")
@@ -954,6 +1019,26 @@ def validate_package_dir(package_dir: Path) -> tuple[list[str], list[str], dict[
     errors: list[str] = []
     warnings: list[str] = []
     summary: dict[str, Any] = {}
+    expected_members = {
+        "imsmanifest.xml",
+        "orgunitconfig/orgunitconfig.xml",
+        "rubrics_d2l.xml",
+    }
+    actual_members: set[str] = set()
+    for path in package_dir.rglob("*"):
+        relative = path.relative_to(package_dir).as_posix()
+        if path.is_symlink():
+            errors.append("Rubric-only package contains a symlink member.")
+            continue
+        if path.is_file():
+            actual_members.add(relative)
+            if path.stat().st_size > 10 * 1024 * 1024:
+                errors.append("Rubric-only package member exceeds the 10 MiB safety limit.")
+    unexpected_members = sorted(actual_members - expected_members)
+    if unexpected_members:
+        errors.append(
+            f"Rubric-only package contains {len(unexpected_members)} unexpected member(s)."
+        )
 
     manifest_path = package_dir / "imsmanifest.xml"
     orgunit_path = package_dir / "orgunitconfig" / "orgunitconfig.xml"
@@ -966,37 +1051,121 @@ def validate_package_dir(package_dir: Path) -> tuple[list[str], list[str], dict[
     if errors:
         return errors, warnings, summary
 
-    manifest_root = ET.parse(manifest_path).getroot()
-    if _local_name(manifest_root.tag) != "manifest":
-        errors.append("imsmanifest.xml root is not 'manifest'.")
+    try:
+        manifest_root = ET.parse(manifest_path).getroot()
+        orgunit_root = ET.parse(orgunit_path).getroot()
+        rubrics_root = ET.parse(rubrics_path).getroot()
+    except (ET.ParseError, OSError):
+        errors.append("Rubric-only package contains malformed XML.")
+        return errors, warnings, summary
+    if manifest_root.tag != f"{{{IMS_NS}}}manifest":
+        errors.append("imsmanifest.xml root does not use the canonical manifest namespace.")
 
-    ns = {"ims": IMS_NS, "d2l_2p0": D2L_NS}
-    resources = manifest_root.findall("./ims:resources/ims:resource", ns)
-    found_orgunit_resource = False
-    found_rubrics_resource = False
+    direct_children = list(manifest_root)
+    if any(
+        _local_name(element.tag) in {"organizations", "organization"}
+        for element in manifest_root.iter()
+    ):
+        errors.append("Manifest contains an unexpected organizations declaration.")
+    if any(
+        child.tag
+        not in {
+            f"{{{IMS_NS}}}metadata",
+            f"{{{IMS_NS}}}resources",
+        }
+        for child in direct_children
+    ):
+        errors.append("Manifest contains unexpected top-level declarations.")
+    resource_containers = [
+        child for child in direct_children if child.tag == f"{{{IMS_NS}}}resources"
+    ]
+    resources: list[ET.Element] = []
+    if len(resource_containers) != 1:
+        errors.append("Manifest must contain exactly one canonical resources container.")
+    else:
+        if any(
+            child.tag != f"{{{IMS_NS}}}resource"
+            for child in list(resource_containers[0])
+        ):
+            errors.append("Manifest resources container has unexpected children.")
+        resources = [
+            child
+            for child in list(resource_containers[0])
+            if child.tag == f"{{{IMS_NS}}}resource"
+        ]
+
     orgunit_identifier_from_manifest = None
+    material_key = f"{{{D2L_NS}}}material_type"
+    link_target_key = f"{{{D2L_NS}}}link_target"
+    expected_attribute_keys = {
+        "identifier",
+        "type",
+        "href",
+        "title",
+        material_key,
+        link_target_key,
+    }
+    identifiers = [resource.attrib.get("identifier", "") for resource in resources]
+    if len(resources) != 2:
+        errors.append("Manifest must register exactly two rubric-only resources.")
+    if (
+        any(not identifier for identifier in identifiers)
+        or len(set(identifiers)) != len(identifiers)
+    ):
+        errors.append("Manifest resource identifiers must be non-empty and unique.")
+    if any(list(resource) for resource in resources):
+        errors.append("Manifest resources must not contain dependencies or child declarations.")
 
-    for resource in resources:
-        material_type = resource.attrib.get(f"{{{D2L_NS}}}material_type", "")
-        href = resource.attrib.get("href", "")
-        if material_type == "orgunitconfig" and href == r"orgunitconfig\orgunitconfig.xml":
-            found_orgunit_resource = True
-            orgunit_identifier_from_manifest = resource.attrib.get("identifier")
-        if material_type == "d2lrubrics" and href == "rubrics_d2l.xml":
-            found_rubrics_resource = True
+    orgunit_resources = [
+        resource
+        for resource in resources
+        if resource.attrib.get(material_key) == "orgunitconfig"
+    ]
+    rubric_resources = [
+        resource
+        for resource in resources
+        if resource.attrib.get(material_key) == "d2lrubrics"
+    ]
+    if len(orgunit_resources) != 1:
+        errors.append("Manifest must contain exactly one orgunitconfig resource.")
+    if len(rubric_resources) != 1:
+        errors.append("Manifest must contain exactly one d2lrubrics resource.")
 
-    if not found_orgunit_resource:
-        errors.append("Manifest does not register orgunitconfig/orgunitconfig.xml as an orgunitconfig resource.")
-    if not found_rubrics_resource:
-        errors.append("Manifest does not register rubrics_d2l.xml as a d2lrubrics resource.")
+    if len(orgunit_resources) == 1:
+        orgunit_resource = orgunit_resources[0]
+        orgunit_identifier_from_manifest = orgunit_resource.attrib.get("identifier")
+        if (
+            set(orgunit_resource.attrib) != expected_attribute_keys
+            or orgunit_resource.attrib.get("type") != "webcontent"
+            or orgunit_resource.attrib.get("href")
+            != r"orgunitconfig\orgunitconfig.xml"
+            or orgunit_resource.attrib.get(link_target_key) != ""
+            or orgunit_resource.attrib.get("title") != ""
+            or orgunit_identifier_from_manifest == "res_rubrics"
+        ):
+            errors.append("Manifest orgunitconfig resource is not canonical.")
+    if len(rubric_resources) == 1:
+        rubric_resource = rubric_resources[0]
+        if (
+            set(rubric_resource.attrib) != expected_attribute_keys
+            or rubric_resource.attrib.get("identifier") != "res_rubrics"
+            or rubric_resource.attrib.get("type") != "webcontent"
+            or rubric_resource.attrib.get("href") != "rubrics_d2l.xml"
+            or rubric_resource.attrib.get(link_target_key) != ""
+            or rubric_resource.attrib.get("title") != ""
+        ):
+            errors.append("Manifest d2lrubrics resource is not canonical.")
+    if any(
+        resource not in orgunit_resources + rubric_resources
+        for resource in resources
+    ):
+        errors.append("Manifest contains an unsupported resource material type.")
 
-    orgunit_root = ET.parse(orgunit_path).getroot()
     if _local_name(orgunit_root.tag) != "orgunit":
         errors.append("orgunitconfig.xml root is not 'orgunit'.")
     if orgunit_identifier_from_manifest and orgunit_root.attrib.get("identifier") != orgunit_identifier_from_manifest:
         errors.append("Manifest orgunit identifier does not match orgunitconfig.xml identifier.")
 
-    rubrics_root = ET.parse(rubrics_path).getroot()
     if _local_name(rubrics_root.tag) != "rubrics":
         errors.append("rubrics_d2l.xml root is not 'rubrics'.")
     if rubrics_root.attrib.get("schemaversion") != "v2011":
@@ -1007,77 +1176,146 @@ def validate_package_dir(package_dir: Path) -> tuple[list[str], list[str], dict[
     if not rubric_elements:
         errors.append("rubrics_d2l.xml contains no rubric elements.")
 
-    for rubric_el in rubric_elements:
-        rubric_name = rubric_el.attrib.get("name", "(unnamed rubric)")
+    for rubric_index, rubric_el in enumerate(rubric_elements, start=1):
         if rubric_el.attrib.get("scoring_method") != "3":
-            errors.append(f"Rubric '{rubric_name}' scoring_method is not '3'.")
+            errors.append(f"Rubric {rubric_index} scoring_method is not '3'.")
         if rubric_el.attrib.get("uses_overall_score") != "True":
-            errors.append(f"Rubric '{rubric_name}' does not enable uses_overall_score='True'.")
+            errors.append(
+                f"Rubric {rubric_index} does not enable uses_overall_score='True'."
+            )
+
+        level_elements = rubric_el.findall("./criteria_groups/criteria_group/level_set/levels/level")
+        if len(level_elements) < 2:
+            errors.append(
+                f"Rubric {rubric_index} must contain at least two performance levels."
+            )
+            continue
+        level_ids = [level.attrib.get("level_id", "") for level in level_elements]
+        level_names = [level.attrib.get("name", "") for level in level_elements]
+        if any(not value for value in level_ids):
+            errors.append(f"Rubric {rubric_index} has a level missing level_id.")
+        if len(set(level_ids)) != len(level_ids):
+            errors.append(f"Rubric {rubric_index} has duplicate level_id values.")
+        if any(not value for value in level_names):
+            errors.append(f"Rubric {rubric_index} has a level missing name.")
+        if len(set(level_names)) != len(level_names):
+            errors.append(f"Rubric {rubric_index} has duplicate level names.")
 
         criteria = rubric_el.findall("./criteria_groups/criteria_group/criteria/criterion")
         if not criteria:
-            errors.append(f"Rubric '{rubric_name}' contains no criteria.")
+            errors.append(f"Rubric {rubric_index} contains no criteria.")
             continue
 
-        advanced_total = 0.0
-        for criterion in criteria:
+        highest_total = 0.0
+        for criterion_index, criterion in enumerate(criteria, start=1):
             cells = criterion.findall("./cells/cell")
-            if len(cells) != 4:
-                errors.append(f"Criterion '{criterion.attrib.get('name', '(unnamed criterion)')}' in rubric '{rubric_name}' does not have 4 cells.")
+            if len(cells) != len(level_elements):
+                errors.append(
+                    f"Criterion {criterion_index} in rubric {rubric_index} has "
+                    f"{len(cells)} cells but the rubric defines {len(level_elements)} levels."
+                )
                 continue
+            cell_level_ids = [cell.attrib.get("level_id", "") for cell in cells]
+            if (
+                len(set(cell_level_ids)) != len(cell_level_ids)
+                or set(cell_level_ids) != set(level_ids)
+            ):
+                errors.append(
+                    f"Criterion {criterion_index} in rubric {rubric_index} "
+                    "does not map exactly once to every level."
+                )
+                continue
+            values: list[float] = []
             for cell in cells:
                 level_id = cell.attrib.get("level_id", "")
                 cell_value = cell.attrib.get("cell_value", "")
                 if not level_id or not cell_value:
-                    errors.append(f"Rubric '{rubric_name}' has a cell missing level_id or cell_value.")
-            advanced_total += float(cells[0].attrib["cell_value"])
+                    errors.append(
+                        f"Criterion {criterion_index} in rubric {rubric_index} "
+                        "has a cell missing level_id or cell_value."
+                    )
+                if level_id and level_id not in level_ids:
+                    errors.append(
+                        f"Criterion {criterion_index} in rubric {rubric_index} "
+                        "has a cell pointing to an unknown level_id."
+                    )
+                try:
+                    values.append(float(cell_value))
+                except ValueError:
+                    errors.append(
+                        f"Criterion {criterion_index} in rubric {rubric_index} "
+                        "has a non-numeric cell_value."
+                    )
+            if values:
+                highest_total += max(values)
 
-        if abs(advanced_total - 100.0) > 1e-9:
-            errors.append(f"Rubric '{rubric_name}' advanced-level criterion totals equal {advanced_total} instead of 100.")
+        if highest_total <= 0:
+            errors.append(
+                f"Rubric {rubric_index} has no positive cell-score total."
+            )
+        if highest_total > 100.0 + 1e-6:
+            errors.append(
+                f"Rubric {rubric_index} highest cell-score total exceeds 100."
+            )
 
         overall_levels = rubric_el.findall("./overall_level_set/overall_levels/overall_level")
-        if len(overall_levels) != 4:
-            errors.append(f"Rubric '{rubric_name}' overall score table does not contain exactly 4 levels.")
+        if len(overall_levels) != len(level_elements):
+            errors.append(
+                f"Rubric {rubric_index} overall score table has {len(overall_levels)} levels "
+                f"but the rubric defines {len(level_elements)} levels."
+            )
             continue
 
         threshold_map: dict[str, float] = {}
-        expected_sort_orders = {level_name: sort_order for level_name, sort_order in OVERALL_LEVELS}
+        expected_sort_orders = {
+            level.attrib.get("name", ""): level.attrib.get("sort_order", "")
+            for level in level_elements
+        }
         for overall_level in overall_levels:
             level_name = overall_level.attrib.get("name", "")
             if level_name not in expected_sort_orders:
-                errors.append(f"Rubric '{rubric_name}' has an unexpected overall level name: {level_name!r}.")
+                errors.append(
+                    f"Rubric {rubric_index} has an unexpected overall level name."
+                )
                 continue
             if level_name in threshold_map:
-                errors.append(f"Rubric '{rubric_name}' defines overall level '{level_name}' more than once.")
+                errors.append(
+                    f"Rubric {rubric_index} defines an overall level more than once."
+                )
                 continue
             sort_order = overall_level.attrib.get("sort_order", "")
-            if sort_order != str(expected_sort_orders[level_name]):
+            if sort_order != expected_sort_orders[level_name]:
                 errors.append(
-                    f"Rubric '{rubric_name}' overall level '{level_name}' has sort_order={sort_order!r} "
-                    f"instead of {expected_sort_orders[level_name]!r}."
+                    f"Rubric {rubric_index} has an overall level with an incorrect sort_order."
                 )
             try:
                 threshold_map[level_name] = float(overall_level.attrib.get("range_start_value", ""))
             except ValueError:
                 errors.append(
-                    f"Rubric '{rubric_name}' overall level '{level_name}' has a non-numeric range_start_value."
+                    f"Rubric {rubric_index} has an overall level with a non-numeric range_start_value."
                 )
 
-        missing_levels = [level_name for level_name, _ in OVERALL_LEVELS if level_name not in threshold_map]
+        missing_levels = [level_name for level_name in level_names if level_name not in threshold_map]
         if missing_levels:
             errors.append(
-                f"Rubric '{rubric_name}' overall score table is missing: {', '.join(missing_levels)}."
+                f"Rubric {rubric_index} overall score table is missing "
+                f"{len(missing_levels)} level(s)."
             )
             continue
 
-        ordered_thresholds = [threshold_map[level_name] for level_name, _ in OVERALL_LEVELS]
+        ordered_thresholds = sorted(threshold_map.values())
         if abs(ordered_thresholds[0]) > 1e-9:
-            errors.append(f"Rubric '{rubric_name}' lowest overall threshold must start at 0.")
+            errors.append(
+                f"Rubric {rubric_index} lowest overall threshold must start at 0."
+            )
         if any(threshold < 0 or threshold > 100 for threshold in ordered_thresholds):
-            errors.append(f"Rubric '{rubric_name}' overall thresholds must stay within the 0-100 score range.")
+            errors.append(
+                f"Rubric {rubric_index} overall thresholds must stay within the 0-100 score range."
+            )
         if any(later <= earlier for earlier, later in zip(ordered_thresholds, ordered_thresholds[1:])):
             errors.append(
-                f"Rubric '{rubric_name}' overall thresholds must increase from Needs Improvement to Advanced."
+                f"Rubric {rubric_index} overall thresholds must increase from the lowest-scoring level "
+                "to the highest-scoring level."
             )
 
     return errors, warnings, summary
@@ -1087,9 +1325,47 @@ def validate_package_path(path: Path) -> tuple[list[str], list[str], dict[str, A
     if path.is_dir():
         return validate_package_dir(path)
     if path.is_file() and path.suffix.lower() == ".zip":
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            temp_root = Path(tmp_dir)
-            with ZipFile(path) as zf:
-                zf.extractall(temp_root)
-            return validate_package_dir(temp_root)
-    raise ValueError(f"Expected a package directory or .zip file, got: {path}")
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                temp_root = Path(tmp_dir)
+                with ZipFile(path) as zf:
+                    if any(info.flag_bits & 0x1 for info in zf.infolist()):
+                        return ["Archive contains encrypted members."], [], {}
+                    expected = {
+                        "imsmanifest.xml",
+                        "orgunitconfig/orgunitconfig.xml",
+                        "rubrics_d2l.xml",
+                    }
+                    names = [info.filename for info in zf.infolist()]
+                    errors: list[str] = []
+                    if len(names) != len(set(names)):
+                        errors.append("Archive contains duplicate member names.")
+                    for member_index, info in enumerate(zf.infolist(), start=1):
+                        member = info.filename.replace("\\", "/")
+                        parts = Path(member).parts
+                        mode = (info.external_attr >> 16) & 0o170000
+                        if member.startswith("/") or ".." in parts:
+                            errors.append(f"Archive member {member_index} is unsafe.")
+                        if mode == 0o120000:
+                            errors.append(f"Archive member {member_index} is a symlink.")
+                        if info.file_size > 10 * 1024 * 1024:
+                            errors.append(
+                                f"Archive member {member_index} exceeds the 10 MiB safety limit."
+                            )
+                        if member not in expected:
+                            errors.append(
+                                f"Archive member {member_index} is unexpected."
+                            )
+                    missing = sorted(expected - set(names))
+                    if missing:
+                        errors.append(f"Archive is missing required members: {', '.join(missing)}.")
+                    if errors:
+                        return errors, [], {}
+                    for info in zf.infolist():
+                        destination = temp_root / info.filename
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        destination.write_bytes(zf.read(info))
+                return validate_package_dir(temp_root)
+        except (BadZipFile, OSError, RuntimeError):
+            return ["Archive is unreadable, malformed, or encrypted."], [], {}
+    raise ValueError("Expected a package directory or .zip file.")

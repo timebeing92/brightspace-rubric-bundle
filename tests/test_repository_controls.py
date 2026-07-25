@@ -38,26 +38,24 @@ def test_pin_covers_both_doors_and_the_contracts() -> None:
         "scripts/rubrics_to_docx.py",
         "scripts/common_xml.py",
         "scripts/build_rubric_package.py",
+        "scripts/make_rubric_package.py",
+        "scripts/rubric_authoring.py",
         "scripts/validate_rubric_package.py",
         "scripts/rubric_package_lib.py",
+        "workspace/reference/schemas/course/run_identity_schema.json",
+        "workspace/reference/schemas/rubrics/rubric_authoring_schema.json",
         "workspace/reference/schemas/rubrics/rubrics_schema.json",
-        "workspace/reference/schemas/progress/progress_events_schema.json",
     }
     assert expected <= targets
 
 
-def test_diverged_staged_prototype_is_not_promoted() -> None:
-    """The label-preserving builder prototype stays workbench-side until it is
-    promoted upstream with its validator and fixtures; only the staged
-    blueprint-bundle progress schema is a legitimate generated-lane source."""
+def test_only_canonical_workbench_sources_are_promoted() -> None:
+    """The old staged prototype remains excluded after canonical promotion."""
     pin = json.loads((REPO_ROOT / "upstream" / "workbench_pin.json").read_text())
     sources = {entry["source"] for entry in pin["files"]}
     assert not any(
-        source.startswith("workspace/generated/shareable-rubric-package-builder")
+        source.startswith("workspace/generated/")
         for source in sources
     )
-    forbidden = {
-        "scripts/docx_to_rubric_contract.py",
-        "scripts/make_rubric_package.py",
-    }
-    assert sources.isdisjoint(forbidden)
+    assert "scripts/docx_to_rubric_contract.py" not in sources
+    assert "scripts/make_rubric_package.py" in sources

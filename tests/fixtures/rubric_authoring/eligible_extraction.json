@@ -1,0 +1,59 @@
+{
+  "schema": "coursecraft.rubrics/1",
+  "source_file": "synthetic/rubrics_d2l.xml",
+  "rubrics": [
+    {
+      "id": "7",
+      "resource_code": "SYNTHETIC-RUBRIC-7",
+      "name": "Synthetic Extracted Rubric",
+      "scoring_method": "3",
+      "attributes": {
+        "id": "7",
+        "resource_code": "SYNTHETIC-RUBRIC-7",
+        "name": "Synthetic Extracted Rubric",
+        "type": "1",
+        "scoring_method": "3",
+        "display_levels_in_des_order": "True",
+        "state": "0",
+        "visibility": "0",
+        "uses_overall_score": "True",
+        "has_manual_alignment": "False",
+        "score_visible_to_assessed_users": "True",
+        "enabled_feedback_copy": "False",
+        "usage_restrictions": "Competency,ePortfolio"
+      },
+      "description": "",
+      "levels": [
+        {"level_id": "701", "name": "Exemplary", "sort_order": 1, "score_band": "100%+"},
+        {"level_id": "702", "name": "Competent", "sort_order": 2, "score_band": "60%+"},
+        {"level_id": "703", "name": "Beginning", "sort_order": 3, "score_band": "0%+"}
+      ],
+      "criteria": [
+        {
+          "name": "Analysis",
+          "sort_order": 1,
+          "cells": [
+            {"level_id": "701", "level_name": "Exemplary", "points": 60, "points_raw": "60", "description": "Complete analysis."},
+            {"level_id": "702", "level_name": "Competent", "points": 36, "points_raw": "36", "description": "Usable analysis."},
+            {"level_id": "703", "level_name": "Beginning", "points": 0, "points_raw": "0", "description": "Incomplete analysis."}
+          ]
+        },
+        {
+          "name": "Evidence",
+          "sort_order": 2,
+          "cells": [
+            {"level_id": "701", "level_name": "Exemplary", "points": 40, "points_raw": "40", "description": "Strong evidence."},
+            {"level_id": "702", "level_name": "Competent", "points": 24, "points_raw": "24", "description": "Relevant evidence."},
+            {"level_id": "703", "level_name": "Beginning", "points": 0, "points_raw": "0", "description": "No evidence."}
+          ]
+        }
+      ],
+      "overall_levels": [
+        {"name": "Exemplary", "sort_order": 1, "range_start_value": 100, "description": "", "feedback": ""},
+        {"name": "Competent", "sort_order": 2, "range_start_value": 60, "description": "", "feedback": ""},
+        {"name": "Beginning", "sort_order": 3, "range_start_value": 0, "description": "", "feedback": ""}
+      ]
+    }
+  ],
+  "diagnostics": []
+}

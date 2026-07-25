@@ -34,6 +34,17 @@ def test_journey_weaves_validates_and_unravels(tmp_path: Path) -> None:
     assert any(name.startswith("unravel:") for name in step_names)
     loop_step = next(step for step in receipt["steps"] if step["name"].startswith("loop:"))
     assert loop_step["rubric_names"]
+    weave_step = next(step for step in receipt["steps"] if step["name"].startswith("weave:"))
+    assert weave_step["progress_steps"][-1] == "Write final run receipt"
 
-    for key in ("rubrics_json", "rubrics_workbook", "rubrics_docx"):
+    for key in (
+        "import_zip",
+        "weave_run_identity",
+        "rubrics_json",
+        "rubrics_workbook",
+        "rubrics_docx",
+    ):
         assert Path(receipt["artifacts"][key]).is_file(), key
+    weave_receipt = json.loads(Path(receipt["artifacts"]["weave_run_identity"]).read_text())
+    assert weave_receipt["schema"] == "coursecraft.run/1"
+    assert weave_receipt["status"] == "ok"

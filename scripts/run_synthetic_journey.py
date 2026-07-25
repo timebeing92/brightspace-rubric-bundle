@@ -14,7 +14,6 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -22,8 +21,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
 JOURNEY_SCHEMA = "brightspace-rubric-bundle.synthetic-journey/1"
-WEAVE_INPUT = REPO_ROOT / "tests/fixtures/rubric_package/input/rubrics_flat.example.md"
-WEAVE_CONTEXT = REPO_ROOT / "tests/fixtures/rubric_package/context/reference_course_shell"
+WEAVE_INPUT = REPO_ROOT / "tests/fixtures/rubric_authoring/three_level_explicit.md"
 
 
 class JourneyError(RuntimeError):
@@ -39,13 +37,16 @@ def run_step(command: list[str]) -> str:
     return result.stdout
 
 
-def parse_key_values(stdout: str) -> dict[str, str]:
-    pairs = {}
+def progress_events(stdout: str) -> list[dict]:
+    events = []
     for line in stdout.splitlines():
-        match = re.match(r"^([a-z_]+)=(.+)$", line.strip())
-        if match:
-            pairs[match.group(1)] = match.group(2)
-    return pairs
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and value.get("event"):
+            events.append(value)
+    return events
 
 
 def rubric_names_from_contract(path: Path) -> list[str]:
@@ -82,25 +83,31 @@ def main() -> int:
         stdout = run_step(
             [
                 sys.executable,
-                str(SCRIPTS / "build_rubric_package.py"),
-                "--input",
+                str(SCRIPTS / "run_weave_bundle.py"),
                 str(WEAVE_INPUT),
                 "--output-dir",
                 str(weave_dir),
-                "--context-dir",
-                str(WEAVE_CONTEXT),
-                "--force",
+                "--progress-events",
             ]
         )
-        built = parse_key_values(stdout)
-        package_dir = Path(built.get("package_dir", weave_dir / "package"))
-        normalized_json = Path(built.get("normalized_json_path", weave_dir / "normalized_rubrics.json"))
-        if not package_dir.is_dir() or not normalized_json.is_file():
+        weave_events = progress_events(stdout)
+        if not weave_events or weave_events[-1].get("status") != "ok":
+            raise JourneyError("Weave orchestrator did not report a successful run")
+        weave_outputs = weave_events[-1].get("outputs", {})
+        package_zip = Path(weave_outputs.get("import_zip", ""))
+        normalized_json = Path(weave_outputs.get("normalized_authoring_json", ""))
+        weave_receipt = Path(weave_outputs.get("run_identity", ""))
+        if not package_zip.is_file() or not normalized_json.is_file() or not weave_receipt.is_file():
             raise JourneyError("weave completed without the expected package artifacts")
-        record("weave: build rubric-only import package", package_dir=str(package_dir))
+        record(
+            "weave: build rubric-only import package",
+            package_zip=str(package_zip),
+            run_receipt=str(weave_receipt),
+            progress_steps=weave_events[0].get("steps", []),
+        )
 
         stdout = run_step(
-            [sys.executable, str(SCRIPTS / "validate_rubric_package.py"), str(package_dir)]
+            [sys.executable, str(SCRIPTS / "validate_rubric_package.py"), str(package_zip)]
         )
         if "VALID" not in stdout:
             raise JourneyError("package validator did not report VALID")
@@ -110,7 +117,7 @@ def main() -> int:
             [
                 sys.executable,
                 str(SCRIPTS / "run_rubric_bundle.py"),
-                str(package_dir),
+                str(package_zip),
                 "--output-dir",
                 str(unravel_dir),
                 "--label",
@@ -149,8 +156,9 @@ def main() -> int:
         "weave_input": str(WEAVE_INPUT.relative_to(REPO_ROOT)),
         "steps": steps,
         "artifacts": {
-            "package_dir": str(package_dir),
+            "import_zip": str(package_zip),
             "normalized_json": str(normalized_json),
+            "weave_run_identity": str(weave_receipt),
             "rubrics_json": str(extracted_json),
             "rubrics_workbook": str(unravel_dir / "loom_proof__rubrics.xlsx"),
             "rubrics_docx": str(unravel_dir / "loom_proof__rubrics.docx"),

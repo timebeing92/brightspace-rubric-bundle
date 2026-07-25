@@ -1,0 +1,45 @@
+{
+  "schema": "coursecraft.rubrics/1",
+  "source_file": "synthetic/rubrics_d2l.xml",
+  "rubrics": [
+    {
+      "id": "8",
+      "resource_code": "SYNTHETIC-RUBRIC-8",
+      "name": "Inconsistent Extracted Rubric",
+      "scoring_method": "3",
+      "attributes": {},
+      "description": "",
+      "levels": [
+        {"level_id": "801", "name": "High", "sort_order": 1, "score_band": "100%+"},
+        {"level_id": "802", "name": "Middle", "sort_order": 2, "score_band": "50%+"},
+        {"level_id": "803", "name": "Low", "sort_order": 3, "score_band": "0%+"}
+      ],
+      "criteria": [
+        {
+          "name": "One",
+          "sort_order": 1,
+          "cells": [
+            {"level_id": "801", "level_name": "High", "points": 50, "points_raw": "50", "description": "High."},
+            {"level_id": "802", "level_name": "Middle", "points": 25, "points_raw": "25", "description": "Middle."},
+            {"level_id": "803", "level_name": "Low", "points": 0, "points_raw": "0", "description": "Low."}
+          ]
+        },
+        {
+          "name": "Two",
+          "sort_order": 2,
+          "cells": [
+            {"level_id": "801", "level_name": "High", "points": 50, "points_raw": "50", "description": "High."},
+            {"level_id": "802", "level_name": "Middle", "points": 40, "points_raw": "40", "description": "Middle."},
+            {"level_id": "803", "level_name": "Low", "points": 0, "points_raw": "0", "description": "Low."}
+          ]
+        }
+      ],
+      "overall_levels": [
+        {"name": "Low", "sort_order": 3, "range_start_value": 0, "description": "", "feedback": ""},
+        {"name": "Middle", "sort_order": 2, "range_start_value": 50, "description": "", "feedback": ""},
+        {"name": "High", "sort_order": 1, "range_start_value": 100, "description": "", "feedback": ""}
+      ]
+    }
+  ],
+  "diagnostics": []
+}
