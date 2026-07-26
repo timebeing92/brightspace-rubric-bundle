@@ -101,12 +101,27 @@ review reached GO, two builds from `6c1af0a…` were byte-identical, the archive
 contained the exact pinned assets, and `v1.2.0` plus its checksum were
 published and remotely verified without changing immutable v1.1.0 history.
 
-## R4 — Hosted workshop bench (authorized next consumer)
+## R3.2 — Hosted release identity (release gate)
+
+- Refuse Git's ambient parent-repository walk when a release archive is
+  unpacked below another checkout.
+- In a source checkout, accept Git identity only when the bundle root is the
+  exact top level.
+- In a release archive, bind the Weave receipt to the source repository, ref,
+  and commit in the archive's immutable `RELEASE_MANIFEST.json`.
+- If neither identity is valid, report `unknown`; never mix a hosting
+  repository's commit with the bundle repository label.
+
+Exit condition: deterministic v1.2.1 archive, checksum, remote release
+verification, and a hosted Weave receipt that names the v1.2.1 bundle source
+commit rather than the Workshop Space commit.
+
+## R4 — Hosted workshop bench (active consumer)
 
 - A Rubric Loom bench in `coursecraft-workshop-space`, only under the
   ecosystem bench-registry pattern and only with separate operator
   authorization (privacy gate: course exports are institutional content).
-- The bench consumes pinned release `v1.2.0` of this repo via CLI plus progress
+- The bench consumes pinned release `v1.2.1` of this repo via CLI plus progress
   events; web-owned code stays presentation-only (the established web-track
   drift governance rule).
 

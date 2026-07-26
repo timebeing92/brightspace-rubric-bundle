@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -10,6 +11,10 @@ import jsonschema
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "run_weave_bundle.py"
+SPEC = importlib.util.spec_from_file_location("run_weave_bundle", SCRIPT)
+assert SPEC and SPEC.loader
+weave_runner = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(weave_runner)
 PRODUCER = REPO_ROOT / "scripts" / "make_rubric_package.py"
 EXPLICIT = REPO_ROOT / "tests" / "fixtures" / "rubric_authoring" / "three_level_explicit.md"
 AMBIGUOUS = (
@@ -89,6 +94,14 @@ def test_build_emits_required_artifacts_and_final_receipt(tmp_path: Path) -> Non
     jsonschema.Draft7Validator(RUN_SCHEMA).validate(receipt)
     assert receipt["status"] == "ok"
     assert receipt["producer"]["component"] == "brightspace-rubric-bundle-weave"
+    assert receipt["producer"]["commit"] == subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    assert receipt["producer"]["extensions"]["identity_basis"] == "bundle_root_git"
     assert receipt["extensions"]["workbench_pin"]["source_commit"] == (
         "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
     )
@@ -108,6 +121,93 @@ def test_build_emits_required_artifacts_and_final_receipt(tmp_path: Path) -> Non
         "Validate rubric package",
         "Write final run receipt",
     ]
+
+
+def test_release_identity_ignores_an_ambient_parent_repository(
+    tmp_path: Path, monkeypatch
+) -> None:
+    ambient = tmp_path / "workshop"
+    ambient.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=ambient, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "synthetic@example.invalid"],
+        cwd=ambient,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Synthetic Test"],
+        cwd=ambient,
+        check=True,
+    )
+    (ambient / "host.txt").write_text("host\n", encoding="utf-8")
+    subprocess.run(["git", "add", "host.txt"], cwd=ambient, check=True)
+    subprocess.run(["git", "commit", "-qm", "host"], cwd=ambient, check=True)
+    ambient_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ambient,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+
+    release_root = ambient / "cache" / "brightspace-rubric-bundle-v1.2.1"
+    release_root.mkdir(parents=True)
+    version_path = release_root / "VERSION"
+    version_path.write_text("1.2.1\n", encoding="utf-8")
+    release_commit = "a" * 40
+    manifest_path = release_root / "RELEASE_MANIFEST.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "coursecraft.bundle_release/1",
+                "version": "1.2.1",
+                "source": {
+                    "repository": (
+                        "https://github.com/timebeing92/"
+                        "brightspace-rubric-bundle.git"
+                    ),
+                    "ref": release_commit,
+                    "commit": release_commit,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(weave_runner, "REPO_ROOT", release_root)
+    monkeypatch.setattr(weave_runner, "VERSION_PATH", version_path)
+    monkeypatch.setattr(weave_runner, "RELEASE_MANIFEST_PATH", manifest_path)
+
+    identity = weave_runner.bundle_identity()
+    assert identity["identity_state"] == "release"
+    assert identity["commit"] == release_commit
+    assert identity["commit"] != ambient_commit
+    assert identity["ref"] == release_commit
+    assert identity["dirty"] is False
+    assert identity["extensions"]["identity_basis"] == "release_manifest"
+    assert identity["extensions"]["release_repository"].endswith(
+        "/brightspace-rubric-bundle.git"
+    )
+
+
+def test_missing_release_identity_never_falls_back_to_ambient_git(
+    tmp_path: Path, monkeypatch
+) -> None:
+    ambient = tmp_path / "workshop"
+    release_root = ambient / "cache" / "bundle"
+    release_root.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=ambient, check=True)
+    version_path = release_root / "VERSION"
+    version_path.write_text("1.2.1\n", encoding="utf-8")
+    manifest_path = release_root / "RELEASE_MANIFEST.json"
+    monkeypatch.setattr(weave_runner, "REPO_ROOT", release_root)
+    monkeypatch.setattr(weave_runner, "VERSION_PATH", version_path)
+    monkeypatch.setattr(weave_runner, "RELEASE_MANIFEST_PATH", manifest_path)
+
+    identity = weave_runner.bundle_identity()
+    assert identity["identity_state"] == "unknown"
+    assert identity["commit"] is None
+    assert identity["ref"] is None
+    assert identity["extensions"]["identity_basis"] == "unavailable"
 
 
 def test_progress_events_conform_and_name_actual_outputs(tmp_path: Path) -> None:

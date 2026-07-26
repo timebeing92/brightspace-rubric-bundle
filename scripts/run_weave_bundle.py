@@ -35,6 +35,7 @@ PROGRESS_SCHEMA_PATH = (
     REPO_ROOT / "workspace/reference/schemas/progress/progress_events_schema.json"
 )
 VERSION_PATH = REPO_ROOT / "VERSION"
+RELEASE_MANIFEST_PATH = REPO_ROOT / "RELEASE_MANIFEST.json"
 PROGRESS_SCHEMA = "coursecraft.progress/1"
 ACCEPTED_PRODUCER_COMMIT = "7c5140545548c89a254ac4502cfdd7ee6fb44255"
 ALLOWED_SUFFIXES = {".docx", ".json", ".md", ".markdown"}
@@ -426,41 +427,120 @@ def verify_upstream_receipt(
             raise StepFailure("producer run receipt artifact checksum verification failed")
 
 
+def _exact_git_identity() -> tuple[str, str | None, bool]:
+    """Read Git identity only when REPO_ROOT itself is the repository.
+
+    Release archives are commonly unpacked below another checkout (including
+    the Workshop Space). Git's normal parent walk would otherwise attribute
+    the bundle to that unrelated repository.
+    """
+    if not (REPO_ROOT / ".git").exists():
+        raise RuntimeError("bundle root has no Git metadata")
+    top_level = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if Path(top_level).resolve() != REPO_ROOT.resolve():
+        raise RuntimeError("Git top level does not match the bundle root")
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if (
+        len(commit) != 40
+        or any(character not in "0123456789abcdef" for character in commit)
+    ):
+        raise RuntimeError("bundle Git commit is not a full SHA")
+    ref_result = subprocess.run(
+        ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    ref = ref_result.stdout.strip() or None
+    dirty_result = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=normal"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return commit, ref, bool(dirty_result.stdout.strip())
+
+
+def _release_manifest_identity(version: str | None) -> tuple[str, str, str]:
+    manifest = load_json(RELEASE_MANIFEST_PATH, "bundle release manifest")
+    source = manifest.get("source")
+    if (
+        manifest.get("schema") != "coursecraft.bundle_release/1"
+        or manifest.get("version") != version
+        or not isinstance(source, dict)
+    ):
+        raise RuntimeError("bundle release manifest identity is invalid")
+    repository = source.get("repository")
+    ref = source.get("ref")
+    commit = source.get("commit")
+    if (
+        not isinstance(repository, str)
+        or not repository.strip()
+        or not isinstance(ref, str)
+        or not ref.strip()
+        or not isinstance(commit, str)
+        or len(commit) != 40
+        or any(character not in "0123456789abcdef" for character in commit)
+    ):
+        raise RuntimeError("bundle release manifest source identity is invalid")
+    return commit, ref, repository
+
+
 def bundle_identity() -> dict[str, Any]:
     version = VERSION_PATH.read_text(encoding="utf-8").strip() if VERSION_PATH.is_file() else None
+    extensions: dict[str, Any] = {
+        "orchestrator_sha256": sha256_file(Path(__file__)),
+    }
     try:
-        commit_result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        dirty_result = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=normal"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        commit = commit_result.stdout.strip()
-        dirty: bool | None = bool(dirty_result.stdout.strip())
+        commit, ref, dirty = _exact_git_identity()
         state = "git"
-    except (OSError, subprocess.CalledProcessError):
-        commit = None
-        dirty = None
-        state = "release" if version else "unknown"
+        extensions["identity_basis"] = "bundle_root_git"
+    except (OSError, RuntimeError, subprocess.CalledProcessError):
+        try:
+            commit, ref, release_repository = _release_manifest_identity(version)
+            dirty = False
+            state = "release"
+            extensions.update(
+                {
+                    "identity_basis": "release_manifest",
+                    "release_manifest_sha256": sha256_file(RELEASE_MANIFEST_PATH),
+                    "release_repository": release_repository,
+                }
+            )
+        except (OSError, RuntimeError, json.JSONDecodeError):
+            commit = None
+            ref = None
+            dirty = None
+            state = "unknown"
+            extensions.update(
+                {
+                    "identity_basis": "unavailable",
+                    "reason": "bundle_root_git_and_release_manifest_unavailable",
+                }
+            )
     return {
         "component": "brightspace-rubric-bundle-weave",
         "identity_state": state,
         "version": version,
         "repository": "brightspace-rubric-bundle",
-        "ref": None,
+        "ref": ref,
         "commit": commit,
         "dirty": dirty,
-        "extensions": {
-            "orchestrator_sha256": sha256_file(Path(__file__)),
-        },
+        "extensions": extensions,
     }
 
 
