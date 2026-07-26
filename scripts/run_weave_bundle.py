@@ -36,6 +36,7 @@ PROGRESS_SCHEMA_PATH = (
 )
 VERSION_PATH = REPO_ROOT / "VERSION"
 PROGRESS_SCHEMA = "coursecraft.progress/1"
+ACCEPTED_PRODUCER_COMMIT = "7c5140545548c89a254ac4502cfdd7ee6fb44255"
 ALLOWED_SUFFIXES = {".docx", ".json", ".md", ".markdown"}
 
 STEP_INSPECT = "Inspect source"
@@ -180,6 +181,60 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def file_source_binding(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    byte_count = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+            byte_count += len(chunk)
+    return digest.hexdigest(), byte_count
+
+
+def source_binding(value: dict[str, Any], label: str) -> tuple[str, int]:
+    source = value.get("source")
+    extensions = source.get("extensions") if isinstance(source, dict) else None
+    digest = source.get("sha256") if isinstance(source, dict) else None
+    byte_count = extensions.get("bytes") if isinstance(extensions, dict) else None
+    if isinstance(source, dict) and digest is None:
+        transport = source.get("transport_fingerprint")
+        if isinstance(transport, dict) and transport.get("algorithm") == "sha256":
+            digest = transport.get("digest")
+            byte_count = transport.get("bytes")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest.lower())
+        or not isinstance(byte_count, int)
+        or isinstance(byte_count, bool)
+        or byte_count < 0
+    ):
+        raise StepFailure(f"{label} lacks an exact source byte binding")
+    return digest.lower(), byte_count
+
+
+def expected_source_binding(
+    args: argparse.Namespace,
+) -> tuple[str, int] | None:
+    digest = args.expected_source_sha256
+    byte_count = args.expected_source_bytes
+    if digest is None and byte_count is None:
+        return None
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest.lower())
+        or not isinstance(byte_count, int)
+        or isinstance(byte_count, bool)
+        or byte_count < 0
+    ):
+        raise StepFailure(
+            "expected source binding requires a SHA-256 and byte count",
+            exit_code=2,
+        )
+    return digest.lower(), byte_count
+
+
 def json_bytes(value: Any) -> bytes:
     return (
         json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
@@ -279,6 +334,11 @@ def verify_pin() -> dict[str, Any]:
     pin = load_json(PIN_PATH, "Workbench pin")
     if pin.get("schema") != "coursecraft.workbench_vendor_pin/1":
         raise StepFailure("Workbench pin uses an unsupported schema", exit_code=2)
+    if pin.get("accepted_producer_commit") != ACCEPTED_PRODUCER_COMMIT:
+        raise StepFailure(
+            "Workbench pin does not retain the accepted producer commit",
+            exit_code=2,
+        )
     required = {
         "scripts/make_rubric_package.py",
         "scripts/rubric_authoring.py",
@@ -319,6 +379,7 @@ def validate_preflight(value: dict[str, Any]) -> None:
             or not rubric["criteria"]
         ):
             raise StepFailure("producer preflight returned an incomplete rubric summary")
+    source_binding(value, "producer preflight")
 
 
 def validate_package(path: Path, timeout: float) -> None:
@@ -337,6 +398,7 @@ def validate_package(path: Path, timeout: float) -> None:
 def verify_upstream_receipt(
     receipt: dict[str, Any],
     output_dir: Path,
+    expected_binding: tuple[str, int],
 ) -> None:
     schema = load_json(RUN_SCHEMA_PATH, "coursecraft.run/1 schema")
     errors = list(Draft7Validator(schema).iter_errors(receipt))
@@ -344,6 +406,10 @@ def verify_upstream_receipt(
         raise StepFailure("producer run receipt violates coursecraft.run/1")
     if receipt.get("status") != "ok":
         raise StepFailure("producer run receipt is not successful")
+    if source_binding(receipt, "producer run receipt") != expected_binding:
+        raise StepFailure(
+            "producer run receipt does not match the preflighted source bytes"
+        )
     for artifact in receipt.get("emitted_files", []):
         if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str):
             raise StepFailure("producer run receipt contains an invalid artifact")
@@ -403,6 +469,7 @@ def final_receipt(
     upstream_receipt_path: Path,
     output_dir: Path,
     pin: dict[str, Any],
+    bound_source: tuple[str, int],
 ) -> dict[str, Any]:
     progress_sha = sha256_file(PROGRESS_SCHEMA_PATH)
     run_schema_sha = sha256_file(RUN_SCHEMA_PATH)
@@ -445,6 +512,9 @@ def final_receipt(
         "contracts": contracts,
         "parameters": {
             "workbench_source_commit": pin["source_commit"],
+            "accepted_producer_commit": pin.get("accepted_producer_commit"),
+            "preflight_source_sha256": bound_source[0],
+            "preflight_source_bytes": bound_source[1],
             "upstream_parameters_sha256": hashlib.sha256(
                 json_bytes(upstream.get("parameters", {}))
             ).hexdigest(),
@@ -484,6 +554,7 @@ def final_receipt(
         "extensions": {
             "workbench_pin": {
                 "source_commit": pin["source_commit"],
+                "accepted_producer_commit": pin.get("accepted_producer_commit"),
                 "file_count": len(pin.get("files", [])),
             },
             "upstream_run_id": upstream.get("run_id"),
@@ -528,12 +599,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="emit coursecraft.progress/1 NDJSON for build runs",
     )
     parser.add_argument("--step-timeout", type=float, default=900.0)
+    parser.add_argument("--expected-source-sha256")
+    parser.add_argument("--expected-source-bytes", type=int)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.preflight:
+        try:
+            verify_pin()
+        except StepFailure as failure:
+            print(
+                json.dumps(
+                    {
+                        "schema": "coursecraft.rubric_authoring_preflight/1",
+                        "status": "error",
+                        "diagnostics": [
+                            {
+                                "id": "diag-0001",
+                                "code": "VENDOR_PIN_INVALID",
+                                "severity": "error",
+                                "message": str(failure),
+                                "location": "producer",
+                                "remediation": "Restore the exact release-pinned producer files.",
+                                "extensions": {},
+                            }
+                        ],
+                    }
+                ),
+                file=sys.stderr,
+            )
+            return 2
         try:
             result = subprocess.run(
                 producer_command(args, None),
@@ -612,11 +709,23 @@ def main(argv: list[str] | None = None) -> int:
         current_step = STEP_CONTRACT
         started = reporter.step_start(index)
         validate_preflight(preflight)
+        bound_source = source_binding(preflight, "producer preflight")
+        expected_binding = expected_source_binding(args)
+        if expected_binding is not None and bound_source != expected_binding:
+            raise StepFailure(
+                "source bytes differ from the caller-approved preflight",
+                exit_code=2,
+            )
         reporter.step_end(index, started, "ok")
 
         index = 4
         current_step = STEP_BUILD
         started = reporter.step_start(index)
+        if file_source_binding(args.source) != bound_source:
+            raise StepFailure(
+                "source changed after preflight; build refused",
+                exit_code=2,
+            )
         run_child(producer_command(args, output_dir), args.step_timeout, refusal_exit=2)
         expected = {
             "package_dir": output_dir / "package",
@@ -642,12 +751,18 @@ def main(argv: list[str] | None = None) -> int:
         current_step = STEP_RECEIPT
         started = reporter.step_start(index)
         upstream = load_json(expected["producer_receipt"], "producer run receipt")
-        verify_upstream_receipt(upstream, output_dir)
+        verify_upstream_receipt(upstream, output_dir, bound_source)
         producer_receipt = output_dir / "producer_run_receipt.json"
         if producer_receipt.exists():
             producer_receipt.unlink()
         shutil.move(expected["producer_receipt"], producer_receipt)
-        final = final_receipt(upstream, producer_receipt, output_dir, pin)
+        final = final_receipt(
+            upstream,
+            producer_receipt,
+            output_dir,
+            pin,
+            bound_source,
+        )
         final_path = output_dir / "run_receipt.json"
         final_path.write_bytes(json_bytes(final))
         reporter.step_end(index, started, "ok")

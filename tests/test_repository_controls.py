@@ -22,12 +22,22 @@ def run_script(*args: str) -> subprocess.CompletedProcess[str]:
 def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     pin = json.loads((REPO_ROOT / "upstream" / "workbench_pin.json").read_text())
     assert pin["schema"] == "coursecraft.workbench_vendor_pin/1"
-    assert len(pin["source_commit"]) == 40
+    assert pin["source_commit"] == "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+    assert (
+        pin["accepted_producer_commit"]
+        == "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+    )
+    sources = [entry["source"] for entry in pin["files"]]
     targets = [entry["target"] for entry in pin["files"]]
+    assert len(sources) == len(set(sources))
     assert len(targets) == len(set(targets))
 
     result = run_script("scripts/vendor_from_workbench.py", "--check")
     assert result.returncode == 0, result.stderr
+
+
+def test_release_candidate_version_is_1_2_0() -> None:
+    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.2.0\n"
 
 
 def test_pin_covers_both_doors_and_the_contracts() -> None:
@@ -45,6 +55,12 @@ def test_pin_covers_both_doors_and_the_contracts() -> None:
         "workspace/reference/schemas/course/run_identity_schema.json",
         "workspace/reference/schemas/rubrics/rubric_authoring_schema.json",
         "workspace/reference/schemas/rubrics/rubrics_schema.json",
+        "scripts/generate_rubric_weave_intake_templates.py",
+        "tests/test_rubric_weave_templates.py",
+        "workspace/reference/templates/rubric-weave/v1/README.md",
+        "workspace/reference/templates/rubric-weave/v1/manifest.json",
+        "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.docx",
+        "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.md",
     }
     assert expected <= targets
 

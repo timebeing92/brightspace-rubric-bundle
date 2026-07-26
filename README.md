@@ -31,6 +31,30 @@ service with two doors that converge on the Brightspace rubric dialect
 
   Missing scoring or weights refuse unless their explicit approval flags are
   supplied. Nothing is imported, and activity attachment remains manual.
+  Interactive and headless terminal builds bind the package to the exact
+  source SHA-256 and byte count shown by preflight.
+
+Two Workbench-owned `v1` intake templates are shipped as exact release-pinned
+assets:
+
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave --list-templates --plain
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave \
+  --copy-template rubric-weave-intake-template.md \
+  --template-destination path/to/my-rubric.md \
+  --plain
+```
+
+Listing and selecting never write. Copying requires an explicit destination;
+an existing regular file requires the separate `--replace-template` action,
+and symlink or non-regular destinations are refused. Complete and save the
+copy, select it in Weave, review producer preflight, correct missing scoring
+or explicitly approve only a permitted fallback, then type `WEAVE`. Downloading
+or completing a template changes nothing in Brightspace. A successful build is
+not an import, attachment remains manual, and scoring is never silently
+invented.
 
 ## Ownership
 
@@ -38,6 +62,10 @@ service with two doors that converge on the Brightspace rubric dialect
 extraction and build semantics, and live-import evidence. This repo contains
 byte-pinned downstream copies of the portable producer files; the pin and
 every promoted file digest are recorded in `upstream/workbench_pin.json`.
+The current mechanical distribution ref is Workbench
+`ad08b1ca1ebd0889bba3353cd87ca71b88f26514`; its producer files retain the
+accepted semantics at
+`7c5140545548c89a254ac4502cfdd7ee6fb44255`.
 The rubric extraction scripts also ship inside `brightspace-blueprint-bundle`
 as part of full blueprint runs; both downstream copies trace to the same
 Workbench source, and fixes land upstream first.
@@ -105,24 +133,26 @@ builds the named ref anyway), stages:
   contract and runtime digests plus independent Unravel and Weave capability
   records;
 - deterministic `SBOM.json` (`coursecraft.bundle_sbom/1`) from
-  `requirements-lock.txt`.
+  `requirements-lock.txt`, including exact template asset records.
 
 It writes a reproducible `dist/brightspace-rubric-bundle-v<VERSION>.tar.gz`
 and matching `.sha256` sidecar. The version is read from `VERSION` at that
 ref. Unravel and Weave have separate runtime-marker gates; a missing Weave
 producer, pin, TUI, preflight, progress, receipt, or manual-attachment marker
-prevents the release build.
+prevents the release build. Missing or mismatched template manifest/assets
+also prevent construction; the archive contains the exact bytes named by the
+Weave capability and SBOM.
 
 ## Current surface
 
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Working; deterministic asset, sidecar, SBOM, and independent Unravel/Weave capability gates |
-| Pinned extraction scripts + `coursecraft.rubrics/1` schema | Byte-identical to Workbench at the pin commit |
-| `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, six progress steps, validated outputs, final receipt |
+| `scripts/make_release_asset.py` (release machinery) | Working; deterministic release machinery, SBOM/template records, and independent Unravel/Weave capability gates are verified; the final v1.2.0 artifact and sidecar await the reviewed real commit |
+| Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `ad08b1c…`; accepted producer semantics remain `7c51405…` |
+| `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, exact source-byte binding, six progress steps, validated outputs, final receipt |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
-| Terminal Rubric Wizard | Working two-door surface; producer preflight, named Weave approval, shared progress board, receipt-grounded results, plain/headless mode, one macOS launcher |
+| Terminal Rubric Wizard | Working two-door surface; integrity-gated template list/copy, producer preflight, named Weave approval, exact source snapshot, receipt-grounded results, plain/headless mode, one macOS launcher |
 | Hosted workshop bench | Authorized next consumer; see `ROADMAP.md` R4 |
 
 The ownership decision record is `docs/REPOSITORY_BOUNDARY.md`. The phased

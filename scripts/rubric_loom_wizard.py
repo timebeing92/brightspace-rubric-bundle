@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shlex
+import stat
 import sys
 import zipfile
 from pathlib import Path
@@ -181,7 +182,7 @@ def save_door_state(door: str, values: dict) -> None:
     save_state(
         {
             "schema": "rubric_loom.state/2",
-            "last_door": state.get("last_door", door),
+            "last_door": door,
             "doors": doors,
         }
     )
@@ -340,6 +341,25 @@ def default_bundle_dir(label: str) -> Path:
     return REPO_ROOT / "output" / f"{label}__rubric_bundle"
 
 
+def output_lane_write_anchor(output_lane: Path) -> tuple[Path, bool]:
+    """Inspect the lane or nearest existing parent without creating either."""
+
+    current = output_lane
+    while True:
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            if current == current.parent:
+                return current, False
+            current = current.parent
+            continue
+        except OSError:
+            return current, False
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            return current, False
+        return current, os.access(current, os.W_OK | os.X_OK)
+
+
 def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
     """Print the checklist; return (core_ok, docx_ok)."""
     version = ".".join(str(part) for part in sys.version_info[:3])
@@ -372,13 +392,15 @@ def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
             True,
         ),
     ]
-    output_ok = True
-    try:
-        (REPO_ROOT / "output").mkdir(parents=True, exist_ok=True)
-    except OSError:
-        output_ok = False
+    output_lane = REPO_ROOT / "output"
+    output_anchor, output_ok = output_lane_write_anchor(output_lane)
+    output_detail = relative_display(output_lane)
+    if output_anchor != output_lane:
+        output_detail += (
+            f" (nearest existing parent: {relative_display(output_anchor)})"
+        )
     checks.append(
-        ("output lane writable", output_ok, relative_display(REPO_ROOT / "output"), True)
+        ("output lane writable", output_ok, output_detail, True)
     )
 
     core_ok = True
@@ -677,6 +699,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--brisk", action="store_true", help="skip the splash and the step-board pacing")
     parser.add_argument("--plain", action="store_true", help="plain text: no color, art, or in-place redraws")
     parser.add_argument("--doctor", action="store_true", help="run the workshop checks and exit")
+    template_actions = parser.add_mutually_exclusive_group()
+    template_actions.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="list exact release-pinned Weave templates without writing",
+    )
+    template_actions.add_argument(
+        "--copy-template",
+        choices=weave.TEMPLATE_NAMES,
+        help="copy one exact release-pinned Weave template",
+    )
+    parser.add_argument(
+        "--template-destination",
+        type=Path,
+        help="required explicit file destination for --copy-template",
+    )
+    parser.add_argument(
+        "--replace-template",
+        action="store_true",
+        help="explicitly replace an existing regular template destination",
+    )
     parser.add_argument(
         "--approve-weave",
         action="store_true",
@@ -991,33 +1034,48 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
     )
 
 
-def remember_last_door(door: str) -> None:
-    state = load_state()
-    doors = state.get("doors")
-    if not isinstance(doors, dict):
-        doors = {}
-    legacy_unravel = door_state(state, "unravel")
-    if legacy_unravel and "unravel" not in doors:
-        doors["unravel"] = legacy_unravel
-    save_state(
-        {
-            "schema": "rubric_loom.state/2",
-            "last_door": door,
-            "doors": doors,
-        }
-    )
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     term = loom_ui.Term(plain=args.plain)
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    template_action = bool(args.list_templates or args.copy_template)
 
     if args.doctor:
         loom_art.banner(term)
         print(loom_ui.heading(term, "The workshop", "doctor"))
         core_ok, _ = run_doctor(term)
         return 0 if core_ok else 2
+
+    if template_action or args.template_destination is not None or args.replace_template:
+        if args.door != "weave":
+            print(
+                "rubric_loom_wizard: template operations require --door weave",
+                file=sys.stderr,
+            )
+            return 2
+        if args.list_templates and (
+            args.template_destination is not None or args.replace_template
+        ):
+            print(
+                "rubric_loom_wizard: listing templates is read-only and accepts "
+                "no destination or replacement flag",
+                file=sys.stderr,
+            )
+            return 2
+        if not template_action:
+            print(
+                "rubric_loom_wizard: --template-destination/--replace-template "
+                "require --copy-template",
+                file=sys.stderr,
+            )
+            return 2
+        if args.source is not None or args.output_dir is not None or args.approve_weave:
+            print(
+                "rubric_loom_wizard: template delivery is separate from a Weave build",
+                file=sys.stderr,
+            )
+            return 2
+        return weave.run_template_headless(term, args)
 
     if args.yes and args.source is None:
         print(
@@ -1041,6 +1099,10 @@ def main(argv: list[str] | None = None) -> int:
         or args.resource_prefix is not None
         or args.force
         or args.step_timeout != 900.0
+        or args.list_templates
+        or args.copy_template is not None
+        or args.template_destination is not None
+        or args.replace_template
     ):
         print(
             "rubric_loom_wizard: Weave-only options require --door weave",
@@ -1094,7 +1156,6 @@ def main(argv: list[str] | None = None) -> int:
         if door == "q":
             print("  nothing was run.")
             return 0
-        remember_last_door(door)
 
         if door == "weave":
             saver = lambda values: save_door_state("weave", values)

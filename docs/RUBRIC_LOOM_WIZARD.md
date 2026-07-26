@@ -17,6 +17,8 @@ then chooses a door:
   invokes producer preflight before writing, displays only producer-reported
   rubric counts, level labels, scoring sources, weight sources, and
   diagnostics, and requires the operator to type `WEAVE` before a build.
+  Before source selection it can also show the exact release-pinned Word and
+  Markdown intake templates. Merely listing or selecting one is read-only.
 
 Both doors use `loom_progress.py` to consume the orchestrators'
 `coursecraft.progress/1` events. Journey code supplies presentation flavor
@@ -55,17 +57,38 @@ approval:
 Those choices are shown before the build and recorded by the pinned producer.
 Without them, preflight exits `2` and creates no output.
 
+Headless template operations are separate from a build:
+
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave --list-templates --plain
+
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave \
+  --copy-template rubric-weave-intake-template.md \
+  --template-destination path/to/editable-rubric.md \
+  --plain
+```
+
+Copy requires a user-chosen destination. Collisions refuse unless the separate
+`--replace-template` action is present; symlink and non-regular destinations
+always refuse. A successful copy reports the release/upstream path, version,
+media type, bytes, and SHA-256 that passed both pin and manifest checks.
+
 ## Weave journey
 
 1. Choose Weave.
-2. Pick or drag a DOCX, Markdown, or JSON source.
-3. Read the pinned producer preflight.
-4. Review reported rubrics, labels, scoring/weight sources, and diagnostics.
-5. Make only the fallback decisions the producer requests.
-6. Confirm label and output folder.
-7. Type the named final approval `WEAVE`.
-8. Watch the orchestrator's real six-step progress board.
-9. Start with the Brightspace import ZIP; review normalized JSON, mapping,
+2. Pick or drag a DOCX, Markdown, or JSON source, or choose **Start from a
+   template** to inspect and explicitly copy a Word/Markdown starter.
+3. When a template was copied, complete and save it, then return and select
+   that saved copy; the copy action does not begin a build.
+4. Read the pinned producer preflight.
+5. Review reported rubrics, labels, scoring/weight sources, and diagnostics.
+6. Make only the fallback decisions the producer requests.
+7. Confirm label and output folder.
+8. Type the named final approval `WEAVE`.
+9. Watch the orchestrator's real six-step progress board.
+10. Start with the Brightspace import ZIP; review normalized JSON, mapping,
    optional DOCX review, diagnostics, and the final receipt.
 
 The success card states: “Nothing was imported. Activity attachment remains
@@ -76,10 +99,21 @@ receipt and checks every named artifact's path, byte count, and SHA-256.
 Incomplete, interrupted, malformed-receipt, or checksum-mismatched runs claim
 no delivery.
 
+The final usable preflight also supplies the source-content binding:
+`source.sha256` is primary and `source.extensions.bytes` is the secondary
+sanity check. Before a terminal build, the selected source is copied into a
+private controlled snapshot only if its current bytes still match. The
+orchestrator compares the same binding to its own preflight and final producer
+receipt. If the original changes, interactive use restarts preflight and
+clears prompt-granted fallbacks; headless use exits `2`. No build starts from
+stale reviewed bytes. The original source path remains the user-facing source
+and remains protected from a containing `--force` output target.
+
 ## Interaction and terminal behavior
 
-- `b`/`back` reverses commission prompts; the preflight is re-shown when the
-  operator backs out of naming.
+- `b`/`back` reverses commission prompts and both fallback prompts; Back from
+  the second fallback returns to the first decision, while Back from the first
+  returns to source/preflight.
 - `q` leaves the landing or door router without running.
 - Ctrl-C returns `130`; a running child receives SIGINT and no incomplete
   Weave artifact is presented as deliverable.
@@ -103,4 +137,6 @@ It does not import DOCX, rubric authoring, package builder, D2L XML, adapter,
 or normalization modules. Repository controls enforce that boundary.
 
 The TUI does not claim a build was imported. It does not attach rubrics to
-activities. It does not replace authored labels or invent scores.
+activities. Downloading or completing a template changes nothing in
+Brightspace; building a package is not import. The TUI does not replace
+authored labels or silently invent scores.

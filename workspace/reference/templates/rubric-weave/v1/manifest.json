@@ -1,0 +1,32 @@
+{
+  "accepted_producer": {
+    "authoring_contract": "coursecraft.rubric_authoring/1",
+    "commit": "7c5140545548c89a254ac4502cfdd7ee6fb44255",
+    "repository": "coursecraft_workbench"
+  },
+  "boundaries": {
+    "activity_attachment": "The output is rubric-only; attachment to an assignment, discussion, quiz, or grade item is a separate manual step.",
+    "brightspace_import": "A successful local build or validation is not a Brightspace import or proof of Brightspace acceptance.",
+    "scoring": "Scores and weights are never silently invented; missing or ambiguous evidence refuses unless the operator explicitly approves a named fallback."
+  },
+  "path_base": "manifest_directory",
+  "schema": "coursecraft.rubric_weave_template_manifest/1",
+  "template_set": "rubric-weave-intake",
+  "templates": [
+    {
+      "bytes": 36204,
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "path": "rubric-weave-intake-template.docx",
+      "sha256": "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c",
+      "version": "v1"
+    },
+    {
+      "bytes": 2410,
+      "media_type": "text/markdown",
+      "path": "rubric-weave-intake-template.md",
+      "sha256": "564ba8ebcee07281cbbe98045c8d56cc1f55e7694d7e453c49033c75db1e6830",
+      "version": "v1"
+    }
+  ],
+  "version": "v1"
+}

@@ -22,13 +22,18 @@ the product name is deliberately distinct from the repo name.
 | `brightspace-blueprint-bundle` | Rubric extraction *within full blueprint runs* (the Rubric Appendix, `<label>__rubrics.*` artifacts of a blueprint bundle). Its copies of the extraction scripts stay governed by its own mirror-policy drift maps. |
 | `coursecraft-workshop-space` | Presentation over one checksum-verified pinned release; it owns upload staging, process supervision, retention, browser state, accessibility, and hosted evidence, never rubric semantics. |
 
-## Activation pin
+## Distribution and producer pins
 
-The accepted surface is byte-pinned from `coursecraft_workbench` commit
-`7c5140545548c89a254ac4502cfdd7ee6fb44255` (2026-07-25). The pin and all 30
-file digests are in `upstream/workbench_pin.json`; every source is canonical,
-not a generated-lane prototype. `coursecraft.progress/1` is bundle-owned and
-is released separately from the Workbench pin.
+The mechanical distribution surface is byte-pinned from
+`coursecraft_workbench` commit
+`ad08b1ca1ebd0889bba3353cd87ca71b88f26514` (2026-07-25). The accepted
+producer semantics remain commit
+`7c5140545548c89a254ac4502cfdd7ee6fb44255`; the later ref adds deterministic
+intake templates and evidence without changing producer bytes. Both identities
+and all 36 file digests are in `upstream/workbench_pin.json`. Every source is
+canonical, not a generated-lane prototype. `coursecraft.progress/1` and
+template discovery/delivery are bundle-owned composition and are released
+separately from Workbench semantics.
 
 ## Included now
 
@@ -39,6 +44,13 @@ is released separately from the Workbench pin.
   `coursecraft.progress/1`.
 - One two-door terminal wizard and launcher with producer preflight, explicit
   fallback/write approvals, cancellation, and receipt-grounded outputs.
+- Two Workbench-owned, versioned intake templates plus their manifest and
+  deterministic generator, mechanically vendored byte-for-byte. Bundle code
+  verifies the outer pin and inner manifest before listing or explicitly
+  copying an asset; template presentation never parses rubric semantics.
+- A controlled private source snapshot binds terminal approval to the exact
+  preflight SHA-256 and byte count. The original lexical source remains
+  separately protected from output replacement.
 - Deterministic synthetic journey, release asset, SBOM, installation, and
   vendor mechanics.
 
@@ -48,6 +60,9 @@ is released separately from the Workbench pin.
 - Rubric-to-activity attachment automation.
 - Production-course operation, learner data, grading, or attempts.
 - Hosted upload, session, retention, and browser implementation.
+- Any Brightspace change caused by downloading or completing a template.
+- Treating package construction as import, silently inventing scores, or
+  automatically attaching a rubric to an activity.
 - Raw course exports, real rubrics, or any institutional evidence.
 
 ## Change rule

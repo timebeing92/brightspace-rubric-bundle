@@ -241,7 +241,38 @@ def test_weave_capability_is_independent_and_exact() -> None:
     assert capability["exit_codes"] == release.WEAVE_EXIT_CODES
     assert capability["activity_attachment"] == "manual_only"
     assert capability["producer_pin"]["source_commit"] == (
+        "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+    )
+    assert capability["producer_pin"]["accepted_producer_commit"] == (
         "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+    )
+    assert capability["source_byte_binding"] == {
+        "primary": "source.sha256",
+        "secondary": "source.extensions.bytes",
+        "build_input": "private_verified_snapshot",
+        "final_check": "coursecraft.run/1 source transport fingerprint",
+    }
+    assert capability["template_operations"]["listing_writes"] is False
+    assert capability["template_operations"]["selection_writes"] is False
+    template_catalog = capability["templates"]
+    assert template_catalog["status"] == "available"
+    assert template_catalog["source_commit"] == (
+        "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+    )
+    assert template_catalog["accepted_producer_commit"] == (
+        "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+    )
+    templates = {item["name"]: item for item in template_catalog["templates"]}
+    assert templates["rubric-weave-intake-template.docx"]["bytes"] == 36204
+    assert templates["rubric-weave-intake-template.docx"]["sha256"] == (
+        "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c"
+    )
+    assert templates["rubric-weave-intake-template.md"]["bytes"] == 2410
+    assert templates["rubric-weave-intake-template.md"]["media_type"] == "text/markdown"
+    assert all(
+        set(item["boundaries"])
+        == {"scoring", "brightspace_import", "activity_attachment"}
+        for item in templates.values()
     )
     assert capability["runtime_files"] == list(release.WEAVE_RUNTIME_FILES)
     assert capability["terminal_runtime_files"] == list(
@@ -270,17 +301,11 @@ def test_unravel_capability_requires_runtime_markers(tmp_path: Path) -> None:
         release.release_capabilities(tmp_path)
 
 
-def test_sbom_is_deterministic_and_lock_grounded(tmp_path: Path) -> None:
-    first_root = tmp_path / "first"
-    second_root = tmp_path / "second"
-    first_root.mkdir()
-    second_root.mkdir()
-    shutil.copyfile(REPO_ROOT / release.REQUIREMENTS_LOCK, first_root / release.REQUIREMENTS_LOCK)
-    shutil.copyfile(REPO_ROOT / release.REQUIREMENTS_LOCK, second_root / release.REQUIREMENTS_LOCK)
-    first = release.write_sbom(first_root)
-    second = release.write_sbom(second_root)
-    assert first.read_bytes() == second.read_bytes()
-    payload = json.loads(first.read_text(encoding="utf-8"))
+def test_sbom_is_deterministic_and_lock_grounded(scratch_bundle: Path) -> None:
+    first = release.sbom_document(scratch_bundle)
+    second = release.sbom_document(scratch_bundle)
+    assert first == second
+    payload = first
     assert payload["schema"] == release.SBOM_SCHEMA
     assert payload["component_count"] == len(payload["components"]) == 10
     assert payload["source"]["sha256"] == release.sha256_file(
@@ -290,6 +315,22 @@ def test_sbom_is_deterministic_and_lock_grounded(tmp_path: Path) -> None:
         "name": "attrs",
         "version": "26.1.0",
         "purl": "pkg:pypi/attrs@26.1.0",
+    }
+    assert payload["asset_count"] == len(payload["assets"]) == 2
+    assert {
+        (asset["name"], asset["bytes"], asset["sha256"])
+        for asset in payload["assets"]
+    } == {
+        (
+            "rubric-weave-intake-template.docx",
+            36204,
+            "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c",
+        ),
+        (
+            "rubric-weave-intake-template.md",
+            2410,
+            "564ba8ebcee07281cbbe98045c8d56cc1f55e7694d7e453c49033c75db1e6830",
+        ),
     }
 
 
@@ -366,6 +407,12 @@ def test_manifest_and_layout_carry_the_release_identity(scratch_bundle: Path) ->
     assert f"{SCRATCH_RELEASE_NAME}/{WEAVE_MARKER}" in names
     assert f"{SCRATCH_RELEASE_NAME}/RELEASE_MANIFEST.json" in names
     assert f"{SCRATCH_RELEASE_NAME}/{release.SBOM_PATH}" in names
+    for relative in (
+        "workspace/reference/templates/rubric-weave/v1/manifest.json",
+        "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.docx",
+        "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.md",
+    ):
+        assert f"{SCRATCH_RELEASE_NAME}/{relative}" in names
 
     manifest = json.loads(
         (staged / SCRATCH_RELEASE_NAME / "RELEASE_MANIFEST.json").read_text(
@@ -394,6 +441,12 @@ def test_manifest_and_layout_carry_the_release_identity(scratch_bundle: Path) ->
     sbom_path = staged / SCRATCH_RELEASE_NAME / release.SBOM_PATH
     assert manifest["sbom"]["sha256"] == release.sha256_file(sbom_path)
     assert manifest["sbom"]["component_count"] == 10
+    assert manifest["sbom"]["asset_count"] == 2
+    release_root = staged / SCRATCH_RELEASE_NAME
+    for item in manifest["capabilities"]["weave"]["templates"]["templates"]:
+        archived = release_root / item["release_path"]
+        assert archived.stat().st_size == item["bytes"]
+        assert release.sha256_file(archived) == item["sha256"]
 
 
 def test_asset_satisfies_the_workshop_fetch_checks(scratch_bundle: Path) -> None:
@@ -496,6 +549,38 @@ def test_build_refuses_weave_runtime_drift_from_the_pin(
     assert result.returncode != 0
     assert "does not match its Workbench pin" in result.stderr
     assert "scripts/rubric_authoring.py" in result.stderr
+    assert not list(output_dir.glob("*.tar.gz"))
+
+
+@pytest.mark.parametrize("failure", ["missing", "mismatch"])
+def test_build_refuses_missing_or_mismatched_template_bytes(
+    scratch_bundle: Path,
+    failure: str,
+) -> None:
+    template = (
+        scratch_bundle
+        / "workspace/reference/templates/rubric-weave/v1/"
+        / "rubric-weave-intake-template.md"
+    )
+    if failure == "missing":
+        template.unlink()
+    else:
+        template.write_bytes(template.read_bytes() + b"tampered")
+    commit_all(scratch_bundle, f"{failure} template")
+
+    output_dir = scratch_bundle.parent / f"dist-template-{failure}"
+    result = build_asset(
+        scratch_bundle,
+        "--ref",
+        "HEAD",
+        "--output-dir",
+        str(output_dir),
+    )
+    assert result.returncode != 0
+    assert (
+        "does not match its Workbench pin" in result.stderr
+        or "lacks valid Weave templates" in result.stderr
+    )
     assert not list(output_dir.glob("*.tar.gz"))
 
 

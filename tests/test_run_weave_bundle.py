@@ -90,8 +90,15 @@ def test_build_emits_required_artifacts_and_final_receipt(tmp_path: Path) -> Non
     assert receipt["status"] == "ok"
     assert receipt["producer"]["component"] == "brightspace-rubric-bundle-weave"
     assert receipt["extensions"]["workbench_pin"]["source_commit"] == (
+        "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+    )
+    assert receipt["extensions"]["workbench_pin"]["accepted_producer_commit"] == (
         "7c5140545548c89a254ac4502cfdd7ee6fb44255"
     )
+    assert receipt["parameters"]["preflight_source_sha256"] == (
+        "f10d64c0a5d27cfa8d6c9d4225676eec1bff645d0eeac6ae87f9815186679f9a"
+    )
+    assert receipt["parameters"]["preflight_source_bytes"] == 442
     assert receipt["extensions"]["activity_attachment"] == "manual_only"
     assert [step["name"] for step in receipt["steps"]] == [
         "Inspect source",
@@ -211,3 +218,24 @@ def test_missing_and_invalid_sources_exit_two(tmp_path: Path) -> None:
     result = run_weave(str(invalid))
     assert result.returncode == 2
     assert "DOCX, Markdown, or JSON" in (result.stdout + result.stderr)
+
+
+def test_expected_source_binding_mismatch_refuses_before_build(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "must-not-exist"
+    result = run_weave(
+        str(EXPLICIT),
+        "--output-dir",
+        str(output),
+        "--expected-source-sha256",
+        "0" * 64,
+        "--expected-source-bytes",
+        str(EXPLICIT.stat().st_size),
+        "--progress-events",
+    )
+    assert result.returncode == 2
+    events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert events[-1]["status"] == "error"
+    assert "caller-approved preflight" in events[-1]["message"]
+    assert not output.exists()

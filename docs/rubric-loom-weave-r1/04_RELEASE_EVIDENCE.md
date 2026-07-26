@@ -2,6 +2,11 @@
 
 Status: v1.1.0 release candidate approved; publication pending
 
+Historical note: this file records the v1.1.0 gate and is intentionally not
+rewritten as v1.2.0 evidence. The immutable v1.1.0 release lacks intake
+templates. The additive template/source-binding candidate is recorded in
+`06_V1_2_0_TEMPLATE_RELEASE_CANDIDATE.md`.
+
 ## Compatibility decision
 
 Weave is additive:

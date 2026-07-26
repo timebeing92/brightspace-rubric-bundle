@@ -14,12 +14,17 @@ import os
 from pathlib import Path
 import secrets
 import shlex
+import stat
 import subprocess
 import sys
+import tempfile
 from typing import Callable
+
+from jsonschema import Draft7Validator
 
 import loom_progress
 import loom_ui
+import rubric_loom_templates as templates
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,8 +41,12 @@ LOG_NAME = "weave_wizard.log"
 LOG_LANE = Path(
     os.environ.get("RUBRIC_LOOM_LOG_DIR", str(REPO_ROOT / "output" / "logs"))
 )
+RUN_SCHEMA_PATH = (
+    REPO_ROOT / "workspace/reference/schemas/course/run_identity_schema.json"
+)
 ALLOWED_SUFFIXES = {".docx", ".json", ".md", ".markdown"}
 PREFLIGHT_SCHEMA = "coursecraft.rubric_authoring_preflight/1"
+TEMPLATE_NAMES = tuple(templates.EXPECTED_MEDIA_TYPES)
 
 PHASES = ("workshop", "source", "preflight", "commission", "weaving")
 VOICE_BOUND = "The cloth is bound ✦"
@@ -50,6 +59,17 @@ FLAVOR = {
     "Validate rubric package": "Testing the finished weave…",
     "Write final run receipt": "Signing the selvage…",
 }
+
+
+class SourceBindingError(RuntimeError):
+    """The source no longer matches the exact bytes shown by preflight."""
+
+
+class _TemplateHandoff:
+    pass
+
+
+TEMPLATE_HANDOFF = _TemplateHandoff()
 
 
 def trail(term: loom_ui.Term, current: str) -> str:
@@ -101,7 +121,12 @@ def default_bundle_dir(label: str) -> Path:
     return REPO_ROOT / "output" / f"{label}__weave_bundle"
 
 
-def source_options(args, *, preflight: bool) -> list[str]:
+def source_options(
+    args,
+    *,
+    preflight: bool,
+    source_binding: tuple[str, int] | None = None,
+) -> list[str]:
     command = [sys.executable, str(ORCHESTRATOR), str(args.source)]
     if preflight:
         command.append("--preflight")
@@ -126,6 +151,15 @@ def source_options(args, *, preflight: bool) -> list[str]:
         if value is not None:
             command.extend([flag, str(value)])
     command.extend(["--step-timeout", str(args.step_timeout)])
+    if source_binding is not None and not preflight:
+        command.extend(
+            [
+                "--expected-source-sha256",
+                source_binding[0],
+                "--expected-source-bytes",
+                str(source_binding[1]),
+            ]
+        )
     return command
 
 
@@ -172,6 +206,117 @@ def preflight_usable(preflight: dict) -> bool:
         and isinstance(preflight.get("rubrics"), list)
         and bool(preflight["rubrics"])
     )
+
+
+def preflight_source_binding(preflight: dict) -> tuple[str, int]:
+    source = preflight.get("source")
+    if not isinstance(source, dict):
+        raise SourceBindingError("producer preflight omitted source identity")
+    digest = source.get("sha256")
+    extensions = source.get("extensions")
+    byte_count = extensions.get("bytes") if isinstance(extensions, dict) else None
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest.lower())
+        or not isinstance(byte_count, int)
+        or isinstance(byte_count, bool)
+        or byte_count < 0
+    ):
+        raise SourceBindingError(
+            "producer preflight returned an incomplete source byte binding"
+        )
+    return digest.lower(), byte_count
+
+
+def preflight_source_label(preflight: dict) -> str:
+    source = preflight.get("source")
+    label = source.get("label") if isinstance(source, dict) else None
+    if not isinstance(label, str) or not label:
+        raise SourceBindingError("producer preflight omitted the effective source label")
+    return label
+
+
+def file_source_binding(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    byte_count = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+            byte_count += len(chunk)
+    return digest.hexdigest(), byte_count
+
+
+def run_end_matches_source_binding(
+    run_end: dict,
+    expected: tuple[str, int],
+) -> bool:
+    outputs = run_end.get("outputs")
+    receipt_raw = outputs.get("run_identity") if isinstance(outputs, dict) else None
+    if not isinstance(receipt_raw, str):
+        return False
+    try:
+        receipt = json.loads(Path(receipt_raw).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    source = receipt.get("source") if isinstance(receipt, dict) else None
+    extensions = source.get("extensions") if isinstance(source, dict) else None
+    transport = (
+        source.get("transport_fingerprint") if isinstance(source, dict) else None
+    )
+    digest = source.get("sha256") if isinstance(source, dict) else None
+    byte_count = extensions.get("bytes") if isinstance(extensions, dict) else None
+    if isinstance(transport, dict) and transport.get("algorithm") == "sha256":
+        digest = transport.get("digest")
+        byte_count = transport.get("bytes")
+    return (
+        isinstance(source, dict)
+        and digest == expected[0]
+        and byte_count == expected[1]
+    )
+
+
+def snapshot_source(
+    source: Path,
+    expected: tuple[str, int],
+) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    """Copy approved bytes into a private immutable locator for the build."""
+
+    temporary = tempfile.TemporaryDirectory(prefix="rubric-loom-weave-source-")
+    os.chmod(temporary.name, 0o700)
+    snapshot = Path(temporary.name) / f"approved-source{source.suffix.lower()}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = None
+    digest = hashlib.sha256()
+    byte_count = 0
+    try:
+        descriptor = os.open(snapshot, flags, 0o600)
+        with source.open("rb") as reader, os.fdopen(descriptor, "wb") as writer:
+            descriptor = None
+            for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+                digest.update(chunk)
+                byte_count += len(chunk)
+                writer.write(chunk)
+            writer.flush()
+            os.fsync(writer.fileno())
+        actual = (digest.hexdigest(), byte_count)
+        if actual != expected:
+            raise SourceBindingError(
+                "source changed after the displayed preflight; no build was started"
+            )
+        os.chmod(snapshot, 0o400)
+        if file_source_binding(snapshot) != expected:
+            raise SourceBindingError(
+                "private source snapshot failed its final integrity check"
+            )
+        return temporary, snapshot
+    except BaseException:
+        if descriptor is not None:
+            os.close(descriptor)
+        temporary.cleanup()
+        raise
 
 
 def preflight_card(term: loom_ui.Term, preflight: dict) -> None:
@@ -264,69 +409,339 @@ def input_lane_candidates() -> list[Path]:
         return []
 
 
-def pick_source(term: loom_ui.Term, remembered: str) -> Path | None:
-    options: list[tuple[str, str]] = []
-    candidates = input_lane_candidates()
-    remembered_path = Path(remembered) if remembered else None
-    default = "path"
-    for index, path in enumerate(candidates, start=1):
-        options.append((str(index), relative_display(path)))
-        if remembered_path == path:
-            default = str(index)
-    options.append(("path", "type or drag a DOCX, Markdown, or JSON path"))
-    options.append(("demo", f"the explicit-scoring demonstration ({relative_display(FIXTURE)})"))
-    if remembered_path == FIXTURE:
-        default = "demo"
+def _template_kind(asset: templates.TemplateAsset) -> str:
+    return "Word" if asset.name.endswith(".docx") else "Markdown"
+
+
+def _template_rows(asset: templates.TemplateAsset) -> list[tuple[str, str]]:
+    return [
+        ("name", asset.name),
+        ("format", _template_kind(asset)),
+        ("version", asset.version),
+        ("media type", asset.media_type),
+        ("bytes", str(asset.bytes)),
+        ("SHA-256", asset.sha256),
+        ("release path", asset.release_path),
+        ("upstream path", asset.upstream_path),
+    ]
+
+
+def _template_next_steps(term: loom_ui.Term, destination: Path) -> None:
+    print(
+        loom_ui.card(
+            term,
+            "Template copy ready",
+            [
+                ("copy", relative_display(destination)),
+                ("next", "Complete the rubric and save the edited file."),
+                ("then", "Return to Weave and select that saved copy."),
+                (
+                    "preflight",
+                    "Correct any scoring gap or explicitly approve only a permitted fallback.",
+                ),
+                ("write approval", "Type the named WEAVE approval."),
+                ("result", "A validated rubric-only package; no Brightspace import."),
+                ("attachment", "Manual in Brightspace after import."),
+                ("scoring", "Never silently invented."),
+            ],
+        )
+    )
+
+
+def _interactive_template_handoff(term: loom_ui.Term) -> bool:
+    catalog, error = templates.catalog_or_error()
+    if catalog is None:
+        print(
+            loom_ui.status_line(
+                term,
+                "warn",
+                "release-pinned templates are unavailable",
+                error or "integrity check failed",
+            )
+        )
+        return False
+    print(
+        loom_ui.card(
+            term,
+            "Release-pinned Weave templates",
+            [
+                ("set", f"{catalog.template_set} {catalog.version}"),
+                ("Workbench ref", catalog.source_commit),
+                ("producer semantics", catalog.accepted_producer_commit),
+                (
+                    "",
+                    "Listing and selecting are read-only. A copy is written only after "
+                    "you explicitly choose a destination.",
+                ),
+            ],
+        )
+    )
+    options = [
+        (asset.name, f"{_template_kind(asset)} — {asset.name}")
+        for asset in catalog.assets
+    ]
+    options.append(("back", "Return to source selection"))
     choice = loom_ui.choose(
         term,
-        "Which authored rubric should the loom weave?",
+        "Which editable template should the loom show?",
         options,
-        default=default,
+        default=catalog.assets[0].name,
+        allow_back=True,
     )
-    if choice == "demo":
-        return FIXTURE
-    if choice == "path":
-        for _ in range(3):
-            raw = loom_ui.prompt_text(term, "Path to the authored rubric", default=remembered)
-            candidate = parse_typed_path(raw)
-            if candidate is None:
+    if choice is loom_ui.BACK or choice == "back":
+        return False
+    asset = next(item for item in catalog.assets if item.name == choice)
+    print(loom_ui.card(term, "Pinned template details", _template_rows(asset)))
+    copy_reply = loom_ui.confirm(
+        term,
+        "Copy these exact bytes to a destination you choose?",
+        default=False,
+        allow_back=True,
+    )
+    if copy_reply is loom_ui.BACK or not copy_reply:
+        return False
+
+    default_destination = Path.cwd() / asset.name
+    while True:
+        raw = loom_ui.prompt_text(
+            term,
+            "Destination file",
+            default=str(default_destination),
+            allow_back=True,
+        )
+        if raw is loom_ui.BACK:
+            return False
+        destination = parse_typed_path(str(raw))
+        if destination is None:
+            continue
+        destination = destination.expanduser().absolute()
+        replace = False
+        try:
+            destination_stat = destination.lstat()
+        except FileNotFoundError:
+            destination_stat = None
+        except OSError as exc:
+            print(loom_ui.status_line(term, "bad", f"destination unavailable: {exc}"))
+            continue
+        if destination_stat is not None:
+            if stat.S_ISLNK(destination_stat.st_mode):
+                print(
+                    loom_ui.status_line(
+                        term, "bad", "refusing a symlink destination"
+                    )
+                )
+                continue
+            if not stat.S_ISREG(destination_stat.st_mode):
+                print(
+                    loom_ui.status_line(
+                        term, "bad", "refusing a non-regular destination"
+                    )
+                )
+                continue
+            replace_reply = loom_ui.confirm(
+                term,
+                "Replace this existing regular file with the pinned template?",
+                default=False,
+                allow_back=True,
+            )
+            if replace_reply is loom_ui.BACK or not replace_reply:
+                continue
+            replace = True
+        try:
+            copied_asset, copied_path = templates.copy_template(
+                asset.name,
+                destination,
+                replace=replace,
+            )
+        except (templates.TemplateCopyError, templates.TemplateIntegrityError) as exc:
+            print(loom_ui.status_line(term, "bad", str(exc)))
+            continue
+        print(
+            loom_ui.status_line(
+                term,
+                "ok",
+                f"copied {_template_kind(copied_asset)} template",
+                f"{copied_asset.bytes} bytes · {copied_asset.sha256}",
+            )
+        )
+        _template_next_steps(term, copied_path)
+        return True
+
+
+def run_template_headless(term: loom_ui.Term, args) -> int:
+    """List or explicitly copy release-pinned templates without a rubric build."""
+
+    catalog, error = templates.catalog_or_error()
+    if catalog is None:
+        print(
+            json.dumps(
+                {
+                    "schema": templates.CATALOG_SCHEMA,
+                    "status": "unavailable",
+                    "error": error or "template integrity check failed",
+                    "written": False,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 2
+    if args.list_templates:
+        print(json.dumps(catalog.release_record(), indent=2, sort_keys=True))
+        return 0
+    if args.template_destination is None:
+        print(
+            "rubric_loom_wizard: --copy-template requires "
+            "--template-destination PATH",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        asset, destination = templates.copy_template(
+            args.copy_template,
+            args.template_destination,
+            replace=args.replace_template,
+        )
+    except (templates.TemplateCopyError, templates.TemplateIntegrityError) as exc:
+        print(f"rubric_loom_wizard: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "schema": templates.CATALOG_SCHEMA,
+                "status": "copied",
+                "template": asset.release_record(),
+                "destination": str(destination),
+                "written": True,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    print(
+        "Complete and save the copy, return to Weave and select it, run producer "
+        "preflight, correct or explicitly approve only a permitted fallback, "
+        "then give the named WEAVE approval for a validated rubric-only package. "
+        "Nothing was imported; attachment remains manual; scoring is never "
+        "silently invented."
+    )
+    return 0
+
+
+def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateHandoff:
+    """Choose a source with constant-stack navigation between source screens."""
+
+    while True:
+        options: list[tuple[str, str]] = []
+        catalog, template_error = templates.catalog_or_error()
+        if catalog is not None:
+            options.append(
+                (
+                    "template",
+                    "Start from a release-pinned Word or Markdown template",
+                )
+            )
+        else:
+            print(
+                loom_ui.status_line(
+                    term,
+                    "warn",
+                    "template convenience is unavailable; ordinary Weave remains available",
+                    template_error or "integrity check failed",
+                )
+            )
+        candidates = input_lane_candidates()
+        remembered_path = Path(remembered) if remembered else None
+        default = "path"
+        for index, path in enumerate(candidates, start=1):
+            options.append((str(index), relative_display(path)))
+            if remembered_path == path:
+                default = str(index)
+        options.append(("path", "type or drag a DOCX, Markdown, or JSON path"))
+        options.append(("demo", f"the explicit-scoring demonstration ({relative_display(FIXTURE)})"))
+        options.append(("q", "leave without running"))
+        if remembered_path == FIXTURE:
+            default = "demo"
+        choice = loom_ui.choose(
+            term,
+            "Which authored rubric should the loom weave?",
+            options,
+            default=default,
+            allow_back=True,
+        )
+        if choice is loom_ui.BACK or choice == "q":
+            return None
+        if choice == "template":
+            if _interactive_template_handoff(term):
+                return TEMPLATE_HANDOFF
+            continue
+        if choice == "demo":
+            return FIXTURE
+        if choice == "path":
+            for _ in range(3):
+                raw = loom_ui.prompt_text(
+                    term,
+                    "Path to the authored rubric",
+                    default=remembered,
+                    allow_back=True,
+                )
+                if raw is loom_ui.BACK:
+                    break
+                candidate = parse_typed_path(str(raw))
+                if candidate is None:
+                    return None
+                if candidate.is_file():
+                    return candidate
+                print(loom_ui.status_line(term, "bad", f"not found: {raw}"))
+            else:
                 return None
-            if candidate.is_file():
-                return candidate
-            print(loom_ui.status_line(term, "bad", f"not found: {raw}"))
-        return None
-    return candidates[int(choice) - 1]
+            continue
+        return candidates[int(choice) - 1]
 
 
-def ensure_fallback_decisions(term: loom_ui.Term, args, preflight: dict) -> tuple[bool, dict]:
-    """Offer only the producer-requested fallback decisions, then re-preflight."""
+def ensure_fallback_decisions(
+    term: loom_ui.Term,
+    args,
+    preflight: dict,
+) -> tuple[str, dict]:
+    """Navigate producer-requested fallbacks, preserving Back as navigation."""
+
     codes = diagnostic_codes(preflight)
-    changed = False
-    if "SCORING_METADATA_REQUIRED" in codes and not args.allow_even_spacing:
+    initial_even = bool(args.allow_even_spacing)
+    initial_equal = bool(args.allow_equal_weights)
+    decisions: list[tuple[str, str]] = []
+    if "SCORING_METADATA_REQUIRED" in codes and not initial_even:
+        decisions.append(("allow_even_spacing", "Approve even level spacing for this run?"))
+    if "CRITERION_WEIGHT_REQUIRED" in codes and not initial_equal:
+        decisions.append(("allow_equal_weights", "Approve equal criterion weights for this run?"))
+    index = 0
+    while index < len(decisions):
+        attribute, prompt = decisions[index]
         reply = loom_ui.confirm(
             term,
-            "Approve even level spacing for this run?",
+            prompt,
             default=False,
             allow_back=True,
         )
-        if reply is loom_ui.BACK or not reply:
-            return False, preflight
-        args.allow_even_spacing = True
-        changed = True
-    if "CRITERION_WEIGHT_REQUIRED" in codes and not args.allow_equal_weights:
-        reply = loom_ui.confirm(
-            term,
-            "Approve equal criterion weights for this run?",
-            default=False,
-            allow_back=True,
-        )
-        if reply is loom_ui.BACK or not reply:
-            return False, preflight
-        args.allow_equal_weights = True
-        changed = True
-    if changed:
+        if reply is loom_ui.BACK:
+            setattr(args, attribute, False)
+            if index == 0:
+                args.allow_even_spacing = initial_even
+                args.allow_equal_weights = initial_equal
+                return "back", preflight
+            index -= 1
+            previous_attribute, _ = decisions[index]
+            setattr(args, previous_attribute, False)
+            continue
+        if not reply:
+            args.allow_even_spacing = initial_even
+            args.allow_equal_weights = initial_equal
+            return "refused", preflight
+        setattr(args, attribute, True)
+        index += 1
+    if decisions:
         _, preflight = invoke_preflight(args)
-    return preflight_usable(preflight), preflight
+    return ("usable" if preflight_usable(preflight) else "refused"), preflight
 
 
 def sha256_file(path: Path) -> str:
@@ -335,6 +750,26 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def receipt_matches_run_schema(receipt: object) -> bool:
+    """Validate a final receipt against the pinned coursecraft.run/1 schema."""
+
+    if not isinstance(receipt, dict):
+        return False
+    try:
+        schema = json.loads(RUN_SCHEMA_PATH.read_text(encoding="utf-8"))
+        if (
+            not isinstance(schema, dict)
+            or schema.get("$id") != "coursecraft.run/1"
+        ):
+            return False
+        Draft7Validator.check_schema(schema)
+        return not any(Draft7Validator(schema).iter_errors(receipt))
+    except Exception:
+        # This is a delivery-claim boundary: unreadable or invalid validation
+        # infrastructure must suppress claims instead of escaping as a crash.
+        return False
 
 
 def grounded_outputs(run_end: dict) -> dict[str, Path]:
@@ -349,6 +784,8 @@ def grounded_outputs(run_end: dict) -> dict[str, Path]:
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return {}
+    if not receipt_matches_run_schema(receipt):
         return {}
     if (
         receipt.get("schema") != "coursecraft.run/1"
@@ -367,9 +804,12 @@ def grounded_outputs(run_end: dict) -> dict[str, Path]:
     bundle = Path(bundle_raw).resolve()
     if receipt_path.parent != bundle or receipt.get("receipt_path") != receipt_path.name:
         return {}
+    emitted_files = receipt.get("emitted_files")
+    if not isinstance(emitted_files, list):
+        return {}
     emitted = {
         item.get("path"): item
-        for item in receipt.get("emitted_files", [])
+        for item in emitted_files
         if isinstance(item, dict) and isinstance(item.get("path"), str)
     }
     expected_roles = {
@@ -456,8 +896,18 @@ def failure_card(term: loom_ui.Term, result: loom_progress.ProgressRun, log_path
     print(loom_ui.card(term, "the scroll", rows))
 
 
-def run_build(term: loom_ui.Term, args, out_dir: Path, label: str) -> int:
-    command = source_options(args, preflight=False)
+def run_build(
+    term: loom_ui.Term,
+    args,
+    out_dir: Path,
+    label: str,
+    source_binding: tuple[str, int],
+) -> int:
+    command = source_options(
+        args,
+        preflight=False,
+        source_binding=source_binding,
+    )
     command.extend(
         [
             "--output-dir",
@@ -497,18 +947,53 @@ def run_build(term: loom_ui.Term, args, out_dir: Path, label: str) -> int:
             )
         )
         return 130
+    binding_ok = False
+    if result.run_end is not None:
+        try:
+            binding_ok = (
+                file_source_binding(args.source) == source_binding
+                and run_end_matches_source_binding(result.run_end, source_binding)
+            )
+        except OSError:
+            binding_ok = False
     if (
         result.return_code == 0
         and result.run_end is not None
         and result.run_end.get("status") == "ok"
+        and binding_ok
         and results_card(term, result.run_end, log_path)
     ):
         return 0
     if result.return_code == 0:
         result.return_code = 1
-        result.failed_message = "The final receipt did not ground every required delivery claim."
+        result.failed_message = (
+            "The final receipt did not ground every required delivery claim "
+            "and the exact source bytes approved at preflight."
+        )
     failure_card(term, result, log_path)
     return result.return_code or 1
+
+
+def run_build_from_approved_snapshot(
+    term: loom_ui.Term,
+    args,
+    original_source: Path,
+    out_dir: Path,
+    label: str,
+    source_binding: tuple[str, int],
+    approved_source_label: str,
+) -> int:
+    temporary, snapshot = snapshot_source(original_source, source_binding)
+    previous_source = args.source
+    previous_source_label = args.source_label
+    try:
+        args.source = snapshot
+        args.source_label = approved_source_label
+        return run_build(term, args, out_dir, label, source_binding)
+    finally:
+        args.source = previous_source
+        args.source_label = previous_source_label
+        temporary.cleanup()
 
 
 def _commission_rows(args, source: Path, label: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -521,6 +1006,36 @@ def _commission_rows(args, source: Path, label: str, out_dir: Path) -> list[tupl
         ("Brightspace import", "not performed"),
         ("activity attachment", "manual only"),
     ]
+
+
+def output_destination_problem(out_dir: Path) -> str | None:
+    try:
+        mode = out_dir.lstat().st_mode
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return "bundle destination is unreadable"
+    if stat.S_ISLNK(mode):
+        return "bundle destination must not be a symlink"
+    if not stat.S_ISDIR(mode):
+        return "bundle destination must be a directory, not an existing file"
+    return None
+
+
+def source_output_separation_problem(source: Path, out_dir: Path) -> str | None:
+    """Keep the original source protected while the producer reads a snapshot."""
+
+    try:
+        resolved_source = source.expanduser().resolve()
+        resolved_output = out_dir.expanduser().resolve(strict=False)
+    except OSError:
+        return "source or bundle destination could not be resolved safely"
+    if (
+        resolved_source == resolved_output
+        or resolved_source.is_relative_to(resolved_output)
+    ):
+        return "bundle destination must not contain the original source"
+    return None
 
 
 def run_headless(
@@ -551,6 +1066,12 @@ def run_headless(
     if not preflight_usable(preflight):
         refusal_card(term, preflight)
         return 2
+    try:
+        source_binding = preflight_source_binding(preflight)
+        approved_source_label = preflight_source_label(preflight)
+    except SourceBindingError as exc:
+        print(loom_ui.status_line(term, "bad", str(exc)))
+        return 2
     if not args.approve_weave:
         print(
             "rubric_loom_wizard: headless Weave requires --approve-weave; "
@@ -561,6 +1082,13 @@ def run_headless(
 
     label = sanitize_label(args.label) if args.label else default_label(source)
     out_dir = (args.output_dir or default_bundle_dir(label)).expanduser().absolute()
+    destination_problem = output_destination_problem(out_dir)
+    destination_problem = destination_problem or source_output_separation_problem(
+        source, out_dir
+    )
+    if destination_problem:
+        print(loom_ui.status_line(term, "bad", destination_problem))
+        return 2
     print(loom_ui.heading(term, "The commission", "4 of 5"))
     print(trail(term, "commission"))
     print(loom_ui.card(term, "Ready to weave", _commission_rows(args, source, label, out_dir)))
@@ -572,7 +1100,20 @@ def run_headless(
             "allow_equal_weights": bool(args.allow_equal_weights),
         }
     )
-    return run_build(term, args, out_dir, label)
+    try:
+        return run_build_from_approved_snapshot(
+            term,
+            args,
+            source,
+            out_dir,
+            label,
+            source_binding,
+            approved_source_label,
+        )
+    except SourceBindingError as exc:
+        print(loom_ui.status_line(term, "bad", str(exc)))
+        print("  source review is stale; run preflight again before building.")
+        return 2
 
 
 def run_interactive(
@@ -581,112 +1122,192 @@ def run_interactive(
     state: dict,
     save_state: Callable[[dict], None],
 ) -> int:
-    source = args.source.expanduser().absolute() if args.source is not None else None
+    provided_source = (
+        args.source.expanduser().absolute() if args.source is not None else None
+    )
+    source = provided_source
+    explicit_even_spacing = bool(args.allow_even_spacing)
+    explicit_equal_weights = bool(args.allow_equal_weights)
     if args.context_dir is not None:
         args.context_dir = args.context_dir.expanduser().absolute()
-    print(loom_ui.heading(term, "The source", "2 of 5"))
-    print(trail(term, "source"))
-    guidance(term, "Choose a DOCX, Markdown, or JSON authoring source; nothing is written yet.")
-    if source is None:
-        source = pick_source(term, str(state.get("source", "")))
-    else:
-        print(loom_ui.status_line(term, "ok", f"source: {relative_display(source)}"))
-    if source is None:
-        print("  nothing was run.")
-        return 0
-    if not source.is_file() or source.suffix.lower() not in ALLOWED_SUFFIXES:
-        print(loom_ui.status_line(term, "bad", "Weave accepts a readable DOCX, Markdown, or JSON file"))
-        return 2
-    source = source.absolute()
-    args.source = source
-
-    print(loom_ui.heading(term, "Producer preflight", "3 of 5"))
-    print(trail(term, "preflight"))
-    guidance(term, "Only producer-reported rubric structure and scoring evidence are shown.")
-    _, preflight = invoke_preflight(args)
-    preflight_card(term, preflight)
-    if not preflight_usable(preflight):
-        usable, preflight = ensure_fallback_decisions(term, args, preflight)
-        if not usable:
-            refusal_card(term, preflight)
-            return 0
-        print()
-        print(loom_ui.card(term, "Producer preflight after explicit approvals", []))
-        preflight_card(term, preflight)
-
-    print(loom_ui.heading(term, "The commission", "4 of 5"))
-    print(trail(term, "commission"))
-    label = sanitize_label(args.label) if args.label else default_label(source)
-    out_dir: Path | None = None
-    step = "label"
     while True:
-        if step == "label":
-            label_reply = loom_ui.prompt_text(
-                term,
-                "Label for the artifacts",
-                default=label,
-                allow_back=True,
-            )
-            if label_reply is loom_ui.BACK:
-                print()
-                preflight_card(term, preflight)
-                guidance(term, "The producer preflight is unchanged; continue or Ctrl-C to leave.")
-                continue
-            label = sanitize_label(str(label_reply))
-            step = "folder"
-        elif step == "folder":
-            default_dir = out_dir or args.output_dir or default_bundle_dir(label)
-            folder_reply = loom_ui.prompt_text(
-                term,
-                "Bundle folder",
-                default=str(default_dir),
-                allow_back=True,
-            )
-            if folder_reply is loom_ui.BACK:
-                step = "label"
-                continue
-            out_dir = (
-                parse_typed_path(str(folder_reply)) or default_dir
-            ).expanduser().absolute()
-            if out_dir.exists() and any(out_dir.iterdir()):
-                overwrite = loom_ui.confirm(
-                    term,
-                    "Matching artifacts may be overwritten. Continue with this folder?",
-                    default=False,
-                    allow_back=True,
-                )
-                if overwrite is loom_ui.BACK or not overwrite:
-                    continue
-            step = "approval"
+        args.allow_even_spacing = explicit_even_spacing
+        args.allow_equal_weights = explicit_equal_weights
+        print(loom_ui.heading(term, "The source", "2 of 5"))
+        print(trail(term, "source"))
+        guidance(
+            term,
+            "Choose a DOCX, Markdown, or JSON authoring source; nothing is written yet.",
+        )
+        if source is None:
+            picked = pick_source(term, str(state.get("source", "")))
+            if picked is TEMPLATE_HANDOFF:
+                print("  no package was built; return after editing the copied template.")
+                return 0
+            source = picked
         else:
-            assert out_dir is not None
+            print(
+                loom_ui.status_line(
+                    term, "ok", f"source: {relative_display(source)}"
+                )
+            )
+        if source is None:
+            print("  nothing was run.")
+            return 0
+        if not source.is_file() or source.suffix.lower() not in ALLOWED_SUFFIXES:
+            print(
+                loom_ui.status_line(
+                    term,
+                    "bad",
+                    "Weave accepts a readable DOCX, Markdown, or JSON file",
+                )
+            )
+            return 2
+        source = source.absolute()
+        args.source = source
+
+        print(loom_ui.heading(term, "Producer preflight", "3 of 5"))
+        print(trail(term, "preflight"))
+        guidance(
+            term,
+            "Only producer-reported rubric structure and scoring evidence are shown.",
+        )
+        _, preflight = invoke_preflight(args)
+        preflight_card(term, preflight)
+        if not preflight_usable(preflight):
+            fallback_status, preflight = ensure_fallback_decisions(
+                term, args, preflight
+            )
+            if fallback_status == "back":
+                if provided_source is None:
+                    source = None
+                continue
+            if fallback_status != "usable":
+                refusal_card(term, preflight)
+                return 0
+            print()
             print(
                 loom_ui.card(
-                    term,
-                    "Ready to weave",
-                    _commission_rows(args, source, label, out_dir),
+                    term, "Producer preflight after explicit approvals", []
                 )
             )
-            guidance(term, "Type the named approval exactly; b returns to the bundle folder.")
-            approval = loom_ui.prompt_text(
-                term,
-                "Type WEAVE to approve writing this rubric-only package",
-                allow_back=True,
-            )
-            if approval is loom_ui.BACK:
-                step = "folder"
-                continue
-            if str(approval).strip() != "WEAVE":
-                print("  named approval was not given; nothing was run.")
-                return 0
-            break
+            preflight_card(term, preflight)
+        try:
+            source_binding = preflight_source_binding(preflight)
+            approved_source_label = preflight_source_label(preflight)
+        except SourceBindingError as exc:
+            print(loom_ui.status_line(term, "bad", str(exc)))
+            return 2
 
-    assert out_dir is not None
-    save_state(
-        {
-            "source": str(source),
-            "allow_even_spacing": bool(args.allow_even_spacing),
-            "allow_equal_weights": bool(args.allow_equal_weights),
-        }
-    )
-    return run_build(term, args, out_dir, label)
+        print(loom_ui.heading(term, "The commission", "4 of 5"))
+        print(trail(term, "commission"))
+        label = sanitize_label(args.label) if args.label else default_label(source)
+        out_dir: Path | None = None
+        step = "label"
+        while True:
+            if step == "label":
+                label_reply = loom_ui.prompt_text(
+                    term,
+                    "Label for the artifacts",
+                    default=label,
+                    allow_back=True,
+                )
+                if label_reply is loom_ui.BACK:
+                    print()
+                    preflight_card(term, preflight)
+                    guidance(
+                        term,
+                        "The producer preflight is unchanged; continue or Ctrl-C to leave.",
+                    )
+                    continue
+                label = sanitize_label(str(label_reply))
+                step = "folder"
+            elif step == "folder":
+                default_dir = out_dir or args.output_dir or default_bundle_dir(label)
+                folder_reply = loom_ui.prompt_text(
+                    term,
+                    "Bundle folder",
+                    default=str(default_dir),
+                    allow_back=True,
+                )
+                if folder_reply is loom_ui.BACK:
+                    step = "label"
+                    continue
+                out_dir = (
+                    parse_typed_path(str(folder_reply)) or default_dir
+                ).expanduser().absolute()
+                destination_problem = output_destination_problem(out_dir)
+                destination_problem = (
+                    destination_problem
+                    or source_output_separation_problem(source, out_dir)
+                )
+                if destination_problem:
+                    print(loom_ui.status_line(term, "bad", destination_problem))
+                    continue
+                if out_dir.exists() and any(out_dir.iterdir()):
+                    overwrite = loom_ui.confirm(
+                        term,
+                        "Matching artifacts may be overwritten. Continue with this folder?",
+                        default=False,
+                        allow_back=True,
+                    )
+                    if overwrite is loom_ui.BACK or not overwrite:
+                        continue
+                step = "approval"
+            else:
+                assert out_dir is not None
+                print(
+                    loom_ui.card(
+                        term,
+                        "Ready to weave",
+                        _commission_rows(args, source, label, out_dir),
+                    )
+                )
+                guidance(
+                    term,
+                    "Type the named approval exactly; b returns to the bundle folder.",
+                )
+                approval = loom_ui.prompt_text(
+                    term,
+                    "Type WEAVE to approve writing this rubric-only package",
+                    allow_back=True,
+                )
+                if approval is loom_ui.BACK:
+                    step = "folder"
+                    continue
+                if str(approval).strip() != "WEAVE":
+                    print("  named approval was not given; nothing was run.")
+                    return 0
+                break
+
+        assert out_dir is not None
+        save_state(
+            {
+                "source": str(source),
+                "allow_even_spacing": bool(args.allow_even_spacing),
+                "allow_equal_weights": bool(args.allow_equal_weights),
+            }
+        )
+        try:
+            return run_build_from_approved_snapshot(
+                term,
+                args,
+                source,
+                out_dir,
+                label,
+                source_binding,
+                approved_source_label,
+            )
+        except SourceBindingError as exc:
+            print(
+                loom_ui.status_line(
+                    term,
+                    "warn",
+                    str(exc),
+                )
+            )
+            guidance(
+                term,
+                "The source review is stale. Weave is restarting preflight; "
+                "fallback approvals and named approval must be made again.",
+            )

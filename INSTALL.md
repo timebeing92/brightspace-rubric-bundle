@@ -43,6 +43,37 @@ Exit codes: `0` success, `1` step failure, `2` usage or environment error,
 .venv/bin/python scripts/run_synthetic_journey.py
 ```
 
+## Start Weave from a pinned template
+
+List the exact Word and Markdown assets without writing:
+
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave --list-templates --plain
+```
+
+Copy one only to an explicit file destination:
+
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave \
+  --copy-template rubric-weave-intake-template.docx \
+  --template-destination "path/to/my-rubric.docx" \
+  --plain
+```
+
+Use `--replace-template` only as a separate, intentional replacement of an
+existing regular file. Symlink and non-regular destinations are refused.
+Complete and save the editable copy, then return to the wizard and select it.
+Producer preflight comes before the named `WEAVE` write approval. Correct
+missing scoring evidence or explicitly approve only the fallback the producer
+permits; no score or weight is silently invented.
+
+Downloading or completing the template makes no Brightspace change. Building
+the validated rubric-only package is not an import. Import and manual
+attachment to an assignment, discussion, quiz, or grade item happen later in
+Brightspace.
+
 ## Verify before committing
 
 ```bash

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -109,6 +110,45 @@ def test_headless_weave_matches_cli_artifacts_and_receipts(tmp_path: Path) -> No
     assert "rubric_package.zip" in text
     assert "Nothing was imported. Activity attachment remains manual." in text
     assert len(list((tmp_path / "logs").glob("*__weave_wizard.log"))) == 1
+
+
+def test_snapshot_preserves_explicit_source_label_and_cli_receipt_semantics(
+    tmp_path: Path,
+) -> None:
+    source_label = "Operator Chosen Rubric Source"
+    tui_dir = tmp_path / "tui"
+    cli_dir = tmp_path / "cli"
+    tui = run_wizard(
+        *weave_args(EXPLICIT, tui_dir),
+        "--source-label",
+        source_label,
+        state=tmp_path / "state.json",
+    )
+    cli = run_cli(
+        str(EXPLICIT),
+        "--output-dir",
+        str(cli_dir),
+        "--source-label",
+        source_label,
+    )
+    assert tui.returncode == cli.returncode == 0
+    for name in (
+        "rubric_package.zip",
+        "rubrics_d2l.xml",
+        "normalized_rubric_authoring.json",
+        "rubric_mapping.md",
+        "diagnostics.json",
+        "producer_run_receipt.json",
+        "run_receipt.json",
+    ):
+        assert (tui_dir / name).read_bytes() == (cli_dir / name).read_bytes()
+    receipt = json.loads((tui_dir / "run_receipt.json").read_text(encoding="utf-8"))
+    assert receipt["source"]["observed_identity"]["source_label_sha256"] == (
+        hashlib.sha256(source_label.encode("utf-8")).hexdigest()
+    )
+    serialized = json.dumps(receipt, sort_keys=True)
+    assert "approved-source" not in serialized
+    assert "rubric-loom-weave-source" not in serialized
 
 
 def test_headless_weave_requires_named_final_approval(tmp_path: Path) -> None:
@@ -319,6 +359,177 @@ def test_delivery_claims_require_the_receipted_artifact_role(
     assert "import_zip" not in journey.grounded_outputs(run_end)
 
 
+@pytest.mark.parametrize("emitted_files", [None, {}, "not-a-list"])
+def test_delivery_claims_fail_closed_for_malformed_emitted_files(
+    tmp_path: Path,
+    emitted_files: object,
+) -> None:
+    import rubric_loom_weave as journey
+
+    output = tmp_path / "out"
+    result = run_cli(str(EXPLICIT), "--output-dir", str(output), "--progress-events")
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_end = [
+        json.loads(line) for line in result.stdout.splitlines() if line.strip()
+    ][-1]
+    receipt_path = output / "run_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["emitted_files"] = emitted_files
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert journey.grounded_outputs(run_end) == {}
+
+
+@pytest.mark.parametrize(
+    "receipt_envelope",
+    [None, [], ["not", "an", "object"], "not-an-object", 7, 2.5, True],
+)
+def test_delivery_claims_fail_closed_for_non_object_receipt_envelopes(
+    tmp_path: Path,
+    receipt_envelope: object,
+) -> None:
+    import rubric_loom_weave as journey
+
+    output = tmp_path / "out"
+    result = run_cli(str(EXPLICIT), "--output-dir", str(output), "--progress-events")
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_end = [
+        json.loads(line) for line in result.stdout.splitlines() if line.strip()
+    ][-1]
+    receipt_path = output / "run_receipt.json"
+    receipt_path.write_text(json.dumps(receipt_envelope), encoding="utf-8")
+    assert journey.grounded_outputs(run_end) == {}
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_run_id",
+        "null_emitted_member",
+        "emitted_member_missing_sha256",
+        "emitted_member_wrong_bytes_type",
+        "parameters_wrong_type",
+    ],
+)
+def test_delivery_claims_require_the_complete_run_receipt_schema(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    import rubric_loom_weave as journey
+
+    output = tmp_path / "out"
+    result = run_cli(str(EXPLICIT), "--output-dir", str(output), "--progress-events")
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_end = [
+        json.loads(line) for line in result.stdout.splitlines() if line.strip()
+    ][-1]
+    assert "import_zip" in journey.grounded_outputs(run_end)
+
+    receipt_path = output / "run_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if mutation == "missing_run_id":
+        receipt.pop("run_id")
+    elif mutation == "null_emitted_member":
+        receipt["emitted_files"].append(None)
+    elif mutation == "emitted_member_missing_sha256":
+        invalid = dict(receipt["emitted_files"][0])
+        invalid.pop("sha256")
+        receipt["emitted_files"].append(invalid)
+    elif mutation == "emitted_member_wrong_bytes_type":
+        invalid = dict(receipt["emitted_files"][0])
+        invalid["bytes"] = str(invalid["bytes"])
+        receipt["emitted_files"].append(invalid)
+    else:
+        receipt["parameters"] = []
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert journey.grounded_outputs(run_end) == {}
+
+
+@pytest.mark.parametrize(
+    "schema_failure",
+    ["missing", "malformed_json", "invalid_schema", "wrong_contract"],
+)
+def test_delivery_claims_fail_closed_when_run_schema_cannot_validate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    schema_failure: str,
+) -> None:
+    import rubric_loom_weave as journey
+
+    output = tmp_path / "out"
+    result = run_cli(str(EXPLICIT), "--output-dir", str(output), "--progress-events")
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_end = [
+        json.loads(line) for line in result.stdout.splitlines() if line.strip()
+    ][-1]
+    assert "import_zip" in journey.grounded_outputs(run_end)
+
+    schema_path = tmp_path / "run_identity_schema.json"
+    if schema_failure == "malformed_json":
+        schema_path.write_text("{", encoding="utf-8")
+    elif schema_failure == "invalid_schema":
+        schema_path.write_text(
+            json.dumps({"$id": "coursecraft.run/1", "type": 7}),
+            encoding="utf-8",
+        )
+    elif schema_failure == "wrong_contract":
+        schema_path.write_text(
+            json.dumps({"$id": "another.contract/1", "type": "object"}),
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(journey, "RUN_SCHEMA_PATH", schema_path)
+    assert journey.grounded_outputs(run_end) == {}
+
+
+def test_headless_regular_file_bundle_target_is_refused_without_change(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "bundle-target"
+    target.write_text("sentinel", encoding="utf-8")
+    result = run_wizard(*weave_args(EXPLICIT, target))
+    assert result.returncode == 2
+    assert b"must be a directory, not an existing file" in result.stdout
+    assert target.read_text(encoding="utf-8") == "sentinel"
+
+
+def test_headless_source_replacement_after_preflight_refuses_without_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_weave as journey
+    import rubric_loom_wizard as wizard
+
+    source = tmp_path / "mutable.md"
+    source.write_bytes(EXPLICIT.read_bytes())
+    output = tmp_path / "must-not-exist"
+    args = wizard.parse_args(
+        [
+            "--door",
+            "weave",
+            "--source",
+            str(source),
+            "--yes",
+            "--approve-weave",
+            "--plain",
+            "--output-dir",
+            str(output),
+        ]
+    )
+    original_preflight = journey.invoke_preflight
+
+    def replace_after_preflight(namespace):
+        result = original_preflight(namespace)
+        source.write_bytes(AMBIGUOUS.read_bytes())
+        return result
+
+    monkeypatch.setattr(journey, "invoke_preflight", replace_after_preflight)
+    result = journey.run_headless(loom_ui.Term(plain=True), args, lambda _: None)
+    assert result == 2
+    assert "source changed after the displayed preflight" in capsys.readouterr().out
+    assert not output.exists()
+
+
 def test_remembered_state_is_isolated_by_door(tmp_path: Path) -> None:
     state = tmp_path / "state.json"
     unravel_out = tmp_path / "unravel"
@@ -332,6 +543,8 @@ def test_remembered_state_is_isolated_by_door(tmp_path: Path) -> None:
         state=state,
     )
     assert unravel.returncode == 0
+    unravel_state = json.loads(state.read_text(encoding="utf-8"))
+    assert unravel_state["last_door"] == "unravel"
     weave_out = tmp_path / "weave"
     weave = run_wizard(
         *weave_args(EXPLICIT, weave_out),
@@ -341,6 +554,7 @@ def test_remembered_state_is_isolated_by_door(tmp_path: Path) -> None:
     assert weave.returncode == 0
     payload = json.loads(state.read_text(encoding="utf-8"))
     assert payload["schema"] == "rubric_loom.state/2"
+    assert payload["last_door"] == "weave"
     assert payload["doors"]["unravel"]["source"] == str(UNRAVEL)
     assert payload["doors"]["unravel"]["docx"] is False
     assert payload["doors"]["weave"]["source"] == str(EXPLICIT.resolve())
@@ -471,6 +685,117 @@ def test_interactive_weave_named_approval_and_back_behavior(tmp_path: Path) -> N
     approved.wait_for("The cloth is bound ✦".encode(), timeout=30)
     assert approved.finish() == 0
     assert (output / "rubric_package.zip").is_file()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
+def test_interactive_source_replacement_restarts_review_without_build(
+    tmp_path: Path,
+) -> None:
+    from test_rubric_loom_wizard import PtyWizard
+
+    source = tmp_path / "mutable.md"
+    source.write_bytes(EXPLICIT.read_bytes())
+    output = tmp_path / "must-not-exist"
+    session = PtyWizard(
+        [
+            "--brisk",
+            "--door",
+            "weave",
+            "--source",
+            str(source),
+            "--output-dir",
+            str(output),
+        ],
+        state=tmp_path / "state.json",
+    )
+    session.wait_for(b"Label for the artifacts")
+    session.send(b"\r")
+    session.wait_for(b"Bundle folder")
+    session.send(b"\r")
+    session.wait_for(b"Type WEAVE")
+    source.write_bytes(
+        (
+            REPO_ROOT
+            / "workspace/reference/templates/rubric-weave/v1/"
+            / "rubric-weave-intake-template.md"
+        ).read_bytes()
+    )
+    session.send(b"WEAVE\r")
+    session.wait_for(b"source changed after the displayed preflight", timeout=20)
+    session.wait_for_count(b"Label for the artifacts", 2, timeout=20)
+    assert not output.exists()
+    session.proc.send_signal(signal.SIGINT)
+    assert session.finish() == 130
+    assert not output.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
+def test_interactive_regular_file_bundle_target_reprompts(
+    tmp_path: Path,
+) -> None:
+    from test_rubric_loom_wizard import PtyWizard
+
+    target = tmp_path / "existing-file"
+    target.write_text("sentinel", encoding="utf-8")
+    alternate = tmp_path / "alternate"
+    session = PtyWizard(
+        [
+            "--brisk",
+            "--door",
+            "weave",
+            "--source",
+            str(EXPLICIT),
+            "--output-dir",
+            str(target),
+        ],
+        state=tmp_path / "state.json",
+    )
+    session.wait_for(b"Label for the artifacts")
+    session.send(b"\r")
+    session.wait_for(b"Bundle folder")
+    session.send(b"\r")
+    session.wait_for(b"must be a directory, not an existing file")
+    session.wait_for_count(b"Bundle folder", 2)
+    session.send(str(alternate).encode() + b"\r")
+    session.wait_for(b"Type WEAVE")
+    session.send(b"NO\r")
+    assert session.finish() == 0
+    assert target.read_text(encoding="utf-8") == "sentinel"
+    assert not alternate.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
+def test_back_at_both_fallback_prompts_navigates_without_writing(
+    tmp_path: Path,
+) -> None:
+    from test_rubric_loom_wizard import PtyWizard
+
+    output = tmp_path / "must-not-exist"
+    session = PtyWizard(
+        [
+            "--brisk",
+            "--door",
+            "weave",
+            "--source",
+            str(AMBIGUOUS),
+            "--output-dir",
+            str(output),
+        ],
+        state=tmp_path / "state.json",
+    )
+    even = b"Approve even level spacing"
+    equal = b"Approve equal criterion weights"
+    session.wait_for(even)
+    session.send(b"b\r")
+    session.wait_for_count(even, 2)
+    session.send(b"y\r")
+    session.wait_for(equal)
+    session.send(b"b\r")
+    session.wait_for_count(even, 3)
+    session.send(b"n\r")
+    assert session.finish() == 0
+    assert b"Producer preflight refused" in session.stream
+    assert not output.exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")

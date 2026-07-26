@@ -8,11 +8,18 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+sys.dont_write_bytecode = True
+import rubric_loom_templates as loom_templates
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_FILES = (
@@ -40,6 +47,7 @@ WEAVE_RUNTIME_FILES = (
 TERMINAL_RUNTIME_FILES = (
     "scripts/rubric_loom_wizard.py",
     "scripts/rubric_loom_weave.py",
+    "scripts/rubric_loom_templates.py",
     "scripts/loom_progress.py",
     "scripts/loom_ui.py",
     "scripts/loom_art.py",
@@ -238,6 +246,19 @@ def runtime_receipt(root: Path) -> list[dict[str, str]]:
     ]
 
 
+def template_catalog_receipt(root: Path) -> dict[str, Any]:
+    """Validate every release template and return its exact pinned metadata."""
+
+    try:
+        catalog = loom_templates.load_catalog(root)
+    except loom_templates.TemplateIntegrityError as exc:
+        raise RuntimeError(f"Selected bundle lacks valid Weave templates: {exc}") from exc
+    record = catalog.release_record()
+    manifest = root / catalog.manifest_path
+    record["manifest_sha256"] = sha256_file(manifest)
+    return record
+
+
 def sbom_document(root: Path) -> dict[str, Any]:
     lock_path = root / REQUIREMENTS_LOCK
     components: list[dict[str, str]] = []
@@ -263,6 +284,14 @@ def sbom_document(root: Path) -> dict[str, Any]:
             }
         )
     components.sort(key=lambda item: (item["name"].lower(), item["version"]))
+    template_catalog = template_catalog_receipt(root)
+    template_assets = [
+        {
+            **dict(item),
+            "asset_type": "editable_template",
+        }
+        for item in template_catalog["templates"]
+    ]
     return {
         "schema": SBOM_SCHEMA,
         "source": {
@@ -271,6 +300,8 @@ def sbom_document(root: Path) -> dict[str, Any]:
         },
         "component_count": len(components),
         "components": components,
+        "asset_count": len(template_assets),
+        "assets": template_assets,
     }
 
 
@@ -291,6 +322,7 @@ def sbom_receipt(root: Path) -> dict[str, Any]:
         "path": SBOM_PATH,
         "sha256": sha256_file(path),
         "component_count": int(payload.get("component_count") or 0),
+        "asset_count": int(payload.get("asset_count") or 0),
     }
 
 
@@ -341,13 +373,23 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
         WEAVE_TERMINAL_ENTRY_POINT: (
             "--door",
             "--approve-weave",
+            "--list-templates",
+            "--copy-template",
+            "--template-destination",
             "loom_progress",
         ),
         "scripts/rubric_loom_weave.py": (
             "run_weave_bundle.py",
             "Type WEAVE",
             "grounded_outputs",
+            "expected-source-sha256",
             "Activity attachment remains manual",
+        ),
+        "scripts/rubric_loom_templates.py": (
+            "coursecraft.rubric_weave_template_manifest/1",
+            "copy_template",
+            "release_path",
+            "upstream_path",
         ),
         "scripts/loom_progress.py": ("coursecraft.progress/1",),
         "scripts/bootstrap_env.py": (
@@ -387,6 +429,8 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
         pin.get("schema") != "coursecraft.workbench_vendor_pin/1"
         or not isinstance(pin.get("source_commit"), str)
         or len(pin["source_commit"]) != 40
+        or not isinstance(pin.get("accepted_producer_commit"), str)
+        or len(pin["accepted_producer_commit"]) != 40
     ):
         raise RuntimeError("Selected bundle lacks a usable Workbench producer pin")
     pinned_entries = {
@@ -416,6 +460,7 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
             raise RuntimeError(
                 f"Selected bundle target does not match its Workbench pin: {target}"
             )
+    template_catalog = template_catalog_receipt(root)
     return {
         "unravel": {
             "status": "enabled",
@@ -453,12 +498,28 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
                 "--allow-equal-weights",
             ],
             "terminal_write_approval_flag": "--approve-weave",
+            "source_byte_binding": {
+                "primary": "source.sha256",
+                "secondary": "source.extensions.bytes",
+                "build_input": "private_verified_snapshot",
+                "final_check": "coursecraft.run/1 source transport fingerprint",
+            },
+            "templates": template_catalog,
+            "template_operations": {
+                "list_flag": "--list-templates",
+                "copy_flag": "--copy-template",
+                "destination_flag": "--template-destination",
+                "replacement_flag": "--replace-template",
+                "listing_writes": False,
+                "selection_writes": False,
+            },
             "steps": list(WEAVE_STEPS),
             "exit_codes": dict(WEAVE_EXIT_CODES),
             "activity_attachment": "manual_only",
             "producer_pin": {
                 "schema": pin["schema"],
                 "source_commit": pin["source_commit"],
+                "accepted_producer_commit": pin["accepted_producer_commit"],
                 "file_count": len(pin.get("files", [])),
             },
             "runtime_files": list(WEAVE_RUNTIME_FILES),

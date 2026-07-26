@@ -510,7 +510,15 @@ pytestmark_pty = pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-onl
 
 
 class PtyWizard:
-    def __init__(self, args: list[str], state: Path) -> None:
+    def __init__(
+        self,
+        args: list[str],
+        state: Path,
+        *,
+        wizard: Path = WIZARD,
+        cwd: Path = REPO_ROOT,
+        env_overrides: dict[str, str] | None = None,
+    ) -> None:
         import fcntl
         import termios
 
@@ -520,9 +528,11 @@ class PtyWizard:
         env["TERM"] = "xterm-256color"
         env["RUBRIC_LOOM_STATE"] = str(state)
         env.pop("NO_COLOR", None)
+        if env_overrides:
+            env.update(env_overrides)
         self.proc = subprocess.Popen(
-            [sys.executable, str(WIZARD), *args],
-            cwd=REPO_ROOT,
+            [sys.executable, str(wizard), *args],
+            cwd=cwd,
             stdin=slave,
             stdout=slave,
             stderr=slave,

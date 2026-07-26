@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PIN_PATH = REPO_ROOT / "upstream" / "workbench_pin.json"
 PIN_SCHEMA = "coursecraft.workbench_vendor_pin/1"
 SOURCE_REMOTE = "https://github.com/timebeing92/coursecraft-workbench.git"
+ACCEPTED_PRODUCER_COMMIT = "7c5140545548c89a254ac4502cfdd7ee6fb44255"
 
 SOURCE_FILES = (
     "scripts/build_rubric_package.py",
@@ -23,6 +24,7 @@ SOURCE_FILES = (
     "scripts/extract_course_context.py",
     "scripts/extract_rubrics_to_workbook.py",
     "scripts/flat_markdown_to_json.py",
+    "scripts/generate_rubric_weave_intake_templates.py",
     "scripts/make_rubric_package.py",
     "scripts/rubric_authoring.py",
     "scripts/rubric_package_lib.py",
@@ -31,6 +33,7 @@ SOURCE_FILES = (
     "tests/test_extract_rubrics_to_workbook.py",
     "tests/test_rubric_authoring.py",
     "tests/test_rubric_package_builder.py",
+    "tests/test_rubric_weave_templates.py",
     "workspace/reference/schemas/course/run_identity_schema.json",
     "workspace/reference/schemas/rubrics/rubric_authoring_schema.json",
 )
@@ -40,9 +43,15 @@ SOURCE_TREES = (
     "tests/fixtures/rubric_authoring",
     "tests/fixtures/tiny_rubrics_export",
     "workspace/reference/schemas/rubrics",
+    "workspace/reference/templates/rubric-weave/v1",
 )
 
 RENAMED_SOURCES: dict[str, str] = {}
+TEMPLATE_ONLY_SOURCES = {
+    "scripts/generate_rubric_weave_intake_templates.py",
+    "tests/test_rubric_weave_templates.py",
+}
+TEMPLATE_ONLY_PREFIX = "workspace/reference/templates/rubric-weave/v1/"
 
 
 class PromotionError(RuntimeError):
@@ -112,14 +121,24 @@ def read_pin() -> dict:
     record = json.loads(PIN_PATH.read_text(encoding="utf-8"))
     if record.get("schema") != PIN_SCHEMA:
         raise PromotionError(f"unsupported pin schema: {record.get('schema')!r}")
+    if record.get("accepted_producer_commit") != ACCEPTED_PRODUCER_COMMIT:
+        raise PromotionError("pin does not retain the accepted producer commit")
     return record
 
 
 def check_targets(pin: dict) -> list[str]:
     errors: list[str] = []
     seen: set[str] = set()
+    seen_sources: set[str] = set()
+    if pin.get("accepted_producer_commit") != ACCEPTED_PRODUCER_COMMIT:
+        errors.append("pin does not retain the accepted producer commit")
     for entry in pin.get("files", []):
+        source_name = entry.get("source")
         target_name = entry.get("target")
+        if not isinstance(source_name, str) or source_name in seen_sources:
+            errors.append(f"invalid or duplicate source: {source_name!r}")
+        else:
+            seen_sources.add(source_name)
         if not isinstance(target_name, str) or target_name in seen:
             errors.append(f"invalid or duplicate target: {target_name!r}")
             continue
@@ -131,6 +150,66 @@ def check_targets(pin: dict) -> list[str]:
         actual = sha256(target.read_bytes())
         if actual != entry.get("sha256"):
             errors.append(f"target drift: {target_name}")
+    manifest_target = safe_target(
+        "workspace/reference/templates/rubric-weave/v1/manifest.json"
+    )
+    if manifest_target.is_file():
+        try:
+            manifest = json.loads(manifest_target.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            errors.append("template manifest is unreadable")
+        else:
+            producer = manifest.get("accepted_producer")
+            if (
+                not isinstance(producer, dict)
+                or producer.get("commit") != pin.get("accepted_producer_commit")
+            ):
+                errors.append(
+                    "template manifest and pin disagree on accepted producer"
+                )
+    return errors
+
+
+def compare_accepted_producer(workbench: Path, commit: str) -> list[str]:
+    errors: list[str] = []
+    ancestor = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(workbench),
+            "merge-base",
+            "--is-ancestor",
+            ACCEPTED_PRODUCER_COMMIT,
+            commit,
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if ancestor.returncode:
+        errors.append("accepted producer commit is not an ancestor of the source ref")
+        return errors
+    for source in selected_sources(workbench, commit):
+        if source in TEMPLATE_ONLY_SOURCES or source.startswith(TEMPLATE_ONLY_PREFIX):
+            continue
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(workbench),
+                "cat-file",
+                "-e",
+                f"{ACCEPTED_PRODUCER_COMMIT}:{source}",
+            ],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode:
+            errors.append(f"accepted producer lacks pinned source: {source}")
+            continue
+        if source_bytes(workbench, commit, source) != source_bytes(
+            workbench, ACCEPTED_PRODUCER_COMMIT, source
+        ):
+            errors.append(f"producer semantics changed after acceptance: {source}")
     return errors
 
 
@@ -149,6 +228,7 @@ def compare_source(workbench: Path, ref: str, pin: dict) -> list[str]:
         actual = sha256(source_bytes(workbench, commit, source))
         if expected != actual:
             errors.append(f"upstream drift at {commit[:12]}: {source}")
+    errors.extend(compare_accepted_producer(workbench, commit))
     return errors
 
 
@@ -156,6 +236,9 @@ def update_pin(workbench: Path, ref: str) -> dict:
     commit_value = git(workbench, "rev-parse", f"{ref}^{{commit}}")
     assert isinstance(commit_value, str)
     commit = commit_value.strip()
+    semantic_errors = compare_accepted_producer(workbench, commit)
+    if semantic_errors:
+        raise PromotionError("; ".join(semantic_errors))
     timestamp_value = git(workbench, "show", "-s", "--format=%cI", commit)
     assert isinstance(timestamp_value, str)
 
@@ -179,6 +262,7 @@ def update_pin(workbench: Path, ref: str) -> dict:
         "source_repository": SOURCE_REMOTE,
         "source_branch": "main",
         "source_commit": commit,
+        "accepted_producer_commit": ACCEPTED_PRODUCER_COMMIT,
         "source_committed_at": timestamp_value.strip(),
         "policy": "byte-identical mechanical promotion; behavior changes upstream first",
         "files": files,
