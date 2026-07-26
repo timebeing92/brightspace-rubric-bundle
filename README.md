@@ -148,7 +148,7 @@ Weave capability and SBOM.
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Working; deterministic release machinery, SBOM/template records, and independent Unravel/Weave capability gates are verified; the final v1.2.0 artifact and sidecar await the reviewed real commit |
+| `scripts/make_release_asset.py` (release machinery) | Working; deterministic v1.2.0 asset and sidecar published from `6c1af0a…` with verified SBOM/template records and independent Unravel/Weave capability gates |
 | Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `ad08b1c…`; accepted producer semantics remain `7c51405…` |
 | `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, exact source-byte binding, six progress steps, validated outputs, final receipt |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |

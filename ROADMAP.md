@@ -83,7 +83,7 @@ Exit condition met: the wizard drives both synthetic journeys end-to-end with
 CLI-equivalent artifacts, explicit fallback and write approvals, isolated
 state, and unchanged Unravel regression behavior.
 
-## R3.1 — Versioned Weave intake templates (v1.2.0 candidate)
+## R3.1 — Versioned Weave intake templates (complete)
 
 - Mechanically vendor the Workbench `v1` Word/Markdown templates, manifest,
   generator, and tests from `ad08b1c…` while retaining accepted producer
@@ -96,16 +96,17 @@ state, and unchanged Unravel regression behavior.
 - Record every template's upstream/release paths, version, media type, bytes,
   SHA-256, and boundaries in Weave capability and SBOM metadata.
 
-Exit condition: focused and full regressions pass, two candidate builds are
-byte-identical, the archive contains the exact pinned assets, and v1.2.0 is
-ready for review without changing the immutable v1.1.0 history.
+Exit condition met 2026-07-25: 287 tests passed with one skip, independent
+review reached GO, two builds from `6c1af0a…` were byte-identical, the archive
+contained the exact pinned assets, and `v1.2.0` plus its checksum were
+published and remotely verified without changing immutable v1.1.0 history.
 
-## R4 — Hosted workshop bench (authorized, pending pinned release)
+## R4 — Hosted workshop bench (authorized next consumer)
 
 - A Rubric Loom bench in `coursecraft-workshop-space`, only under the
   ecosystem bench-registry pattern and only with separate operator
   authorization (privacy gate: course exports are institutional content).
-- The bench consumes a pinned release of this repo via CLI plus progress
+- The bench consumes pinned release `v1.2.0` of this repo via CLI plus progress
   events; web-owned code stays presentation-only (the established web-track
   drift governance rule).
 

@@ -1,7 +1,7 @@
-# v1.2.0 template release candidate
+# v1.2.0 template release evidence
 
-Status: uncommitted implementation under review; the earlier local archive is
-superseded and is not current or publishable evidence
+Status: published and remotely verified; the earlier local archive remains
+superseded and is not release evidence
 
 ## Additive promotion
 
@@ -110,8 +110,26 @@ receipt schema validation. They describe only that superseded snapshot and
 must not be treated as current release evidence or as publishable v1.2.0
 artifacts.
 
-A final deterministic archive build, second-build byte comparison, sidecar
-checksum, and exact archived template-byte comparison remain pending. They
-must be performed from the eventual reviewed real commit before any
-publication. No current archive or public release claim is made by this local
-evidence note.
+## Immutable release
+
+The reviewed source tranche is commit
+`6c1af0aacd746cd78fa30d6d654588338816dc04`, tagged `v1.2.0`. Two independent
+builds from that exact commit were byte-identical. The published archive is:
+
+- release:
+  `https://github.com/timebeing92/brightspace-rubric-bundle/releases/tag/v1.2.0`;
+- asset: `brightspace-rubric-bundle-v1.2.0.tar.gz`;
+- bytes: **242,130**;
+- SHA-256:
+  `bb9036f6da074df2518b1b66647916741516190e2f3b711b4bfe39aa0acf72dc`;
+- sidecar: `brightspace-rubric-bundle-v1.2.0.tar.gz.sha256`;
+- published: `2026-07-26T01:19:56Z`.
+
+The archive manifest identifies source commit `6c1af0a…`, version `1.2.0`, the
+36-file Workbench distribution pin at `ad08b1c…`, and accepted producer
+semantics at `7c51405…`. The SBOM records ten locked Python components and the
+two editable template assets.
+
+The remotely downloaded archive and sidecar were byte-identical to the two
+local deterministic builds. The archived Word and Markdown assets also
+matched the Workbench-owned bytes, sizes, and SHA-256 values recorded above.
