@@ -112,9 +112,10 @@ published and remotely verified without changing immutable v1.1.0 history.
 - If neither identity is valid, report `unknown`; never mix a hosting
   repository's commit with the bundle repository label.
 
-Exit condition: deterministic v1.2.1 archive, checksum, remote release
-verification, and a hosted Weave receipt that names the v1.2.1 bundle source
-commit rather than the Workshop Space commit.
+Release condition met 2026-07-25: 289 tests passed with one expected skip,
+two full-SHA builds from `ee61bbf…` were byte-identical, and v1.2.1 plus its
+checksum were published and remotely byte-verified. The downstream hosted
+receipt check remains the final R4 adoption gate.
 
 ## R4 — Hosted workshop bench (active consumer)
 

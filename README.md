@@ -148,7 +148,7 @@ Weave capability and SBOM.
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Working; immutable v1.2.0 remains published from `6c1af0a…`; v1.2.1 adds the hosted release-identity repair without changing template or rubric semantics |
+| `scripts/make_release_asset.py` (release machinery) | Working; immutable v1.2.0 remains published from `6c1af0a…`; deterministic v1.2.1 provenance repair is published from `ee61bbf…` with archive SHA-256 `8b739638…` |
 | Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `ad08b1c…`; accepted producer semantics remain `7c51405…` |
 | `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, exact source-byte binding, six progress steps, validated outputs, and a final receipt whose bundle commit comes from the exact repository root or immutable release manifest—never an ambient parent checkout |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
