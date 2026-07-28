@@ -25,7 +25,9 @@ attach imported rubrics to activities manually.
 
 **On macOS:** clone or download this repository, then double-click
 `launch_rubric_loom.command`. The launcher checks for Python 3.11–3.13 and,
-on the first run, offers to create a local `.venv` inside this folder.
+on the first run, offers to create a local `.venv` inside this folder. It
+then opens the Loom artwork and the two choices directly: **Unravel** or
+**Weave**.
 
 **From a terminal:** use any installed Python 3.11, 3.12, or 3.13:
 
@@ -44,9 +46,22 @@ recommendations, or enter the number of the one item you want to change.
 Weave also shows its producer preflight and requires the final named approval
 `WEAVE`.
 
-Want to look around before using your own files? The macOS launcher includes
-synthetic demonstrations for both Unravel and Weave. The examples contain no
-course, learner, or institutional data.
+Environment checks are automatic and quiet when everything is ready. If a
+required Python package is missing, the Loom explains what it needs and
+offers to install the pinned dependencies into its local `.venv`. The full
+diagnostic checklist remains available with
+`.venv/bin/python scripts/rubric_loom_wizard.py --doctor`.
+
+The guided TUI also checks GitHub for a newer published Rubric Loom release
+at most once per day. Current, offline, and failed checks stay quiet. When a
+newer release exists, the Loom shows the installed and available versions and
+can open the release page; it never installs an update automatically. Use
+`--check-for-updates` for an explicit check or `--no-update-check` to skip the
+automatic check.
+
+Want to look around before using your own files? Each door’s source chooser
+includes a synthetic demonstration. The examples contain no course, learner,
+or institutional data.
 
 For detailed terminal and headless options, see
 [`docs/RUBRIC_LOOM_WIZARD.md`](docs/RUBRIC_LOOM_WIZARD.md).
@@ -146,16 +161,19 @@ names survive the loop. The receipt lands in
 .venv/bin/python scripts/rubric_loom_wizard.py
 ```
 
-Or double-click `launch_rubric_loom.command` (macOS): one launcher offers the
-guided two-door Loom, demonstrations for both doors, and the workshop doctor.
-On a fresh machine it offers to build the `.venv` first.
+Or double-click `launch_rubric_loom.command` (macOS). On a fresh machine it
+offers to build the `.venv`, then opens the Loom artwork and the explicit
+**Unravel** / **Weave** landing page. Each door offers its own synthetic
+demonstration from the source chooser.
 
 Unravel retains its export peek and review artifacts. Weave invokes producer
 preflight, shows only producer-reported labels and scoring evidence, requires
 a named final approval, and leads with the receipt-grounded import ZIP.
-Both doors share the doctor, terminal kit, progress-event consumer,
-cancellation behavior, plain mode, launcher, and door-isolated remembered
-state. Legacy `--source PATH --yes` remains Unravel. Headless Weave requires
+Both doors share automatic environment checks, the terminal kit,
+progress-event consumer, cancellation behavior, plain mode, launcher, and
+door-isolated remembered state. The verbose doctor is an explicit diagnostic
+command, not a normal journey screen. Legacy `--source PATH --yes` remains
+Unravel. Headless Weave requires
 `--door weave --source PATH --yes --approve-weave`. See
 `docs/RUBRIC_LOOM_WIZARD.md`.
 

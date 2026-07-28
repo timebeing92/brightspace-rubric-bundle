@@ -13,12 +13,10 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$'\033[0m'
   C_DIM=$'\033[2m'
   C_BOLD=$'\033[1m'
-  C_ROSE=$'\033[38;5;168m'
 else
   C_RESET=""
   C_DIM=""
   C_BOLD=""
-  C_ROSE=""
 fi
 
 hold_open() {
@@ -61,8 +59,8 @@ first_time_setup() {
       ;;
   esac
   echo
-  printf "%b%s%b\n" "$C_DIM" "$BOOTSTRAP_PY scripts/bootstrap_env.py --dev" "$C_RESET"
-  if ! "$BOOTSTRAP_PY" "$REPO_DIR/scripts/bootstrap_env.py" --dev; then
+  printf "%b%s%b\n" "$C_DIM" "$BOOTSTRAP_PY scripts/bootstrap_env.py --locked" "$C_RESET"
+  if ! "$BOOTSTRAP_PY" "$REPO_DIR/scripts/bootstrap_env.py" --locked; then
     echo
     echo "Setup did not finish; the message above says why."
     hold_open
@@ -79,33 +77,8 @@ if [ -t 1 ]; then
   printf '\033]0;Rubric Loom\007'
 fi
 
-printf "  %b%s%b\n" "$C_ROSE$C_BOLD" "RUBRIC LOOM" "$C_RESET"
-printf "  %b%s%b\n" "$C_DIM" "Unravel exports · Weave rubric-only import packages" "$C_RESET"
 echo
-printf "%b%s%b\n" "$C_BOLD" "Choose:" "$C_RESET"
-printf "  %b1.%b Open the loom %b(guided two-door wizard)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
-printf "  %b2.%b Demonstration unravel %b(the pinned synthetic fixture)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
-printf "  %b3.%b Demonstration weave %b(explicit-scoring Markdown fixture)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
-printf "  %b4.%b Workshop doctor %b(environment checks only)%b\n" "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
-echo
-read -r -p "Selection [1]: " CHOICE || CHOICE=""
-CHOICE="${CHOICE:-1}"
-
-case "$CHOICE" in
-  1) ARGS=() ;;
-  2) ARGS=("--source" "$REPO_DIR/tests/fixtures/tiny_rubrics_export") ;;
-  3) ARGS=("--door" "weave" "--source" "$REPO_DIR/tests/fixtures/rubric_authoring/three_level_explicit.md") ;;
-  4) ARGS=("--doctor") ;;
-  q|Q) echo "The loom stays idle."; hold_open; exit 0 ;;
-  *)
-    echo "Unknown selection: $CHOICE"
-    hold_open
-    exit 2
-    ;;
-esac
-
-echo
-"$PYTHON" "$REPO_DIR/scripts/rubric_loom_wizard.py" "${ARGS[@]+"${ARGS[@]}"}"
+"$PYTHON" "$REPO_DIR/scripts/rubric_loom_wizard.py" "$@"
 STATUS=$?
 echo
 if [ "$STATUS" -eq 0 ]; then

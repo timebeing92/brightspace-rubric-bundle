@@ -284,9 +284,124 @@ def test_doctor_flag_runs_standalone() -> None:
     result = run_wizard("--doctor")
     assert result.returncode == 0
     stdout = result.stdout.decode()
-    assert "The workshop" in stdout
+    assert "Rubric Loom doctor" in stdout
     assert "The loom is threaded." in stdout
     assert b"\x1b" not in result.stdout
+
+
+def test_ordinary_environment_check_is_quiet_when_ready(capsys) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    core_ok, docx_ok = wizard.ensure_environment(
+        loom_ui.Term(plain=True),
+        assume_yes=False,
+    )
+    assert core_ok is True
+    assert docx_ok is True
+    assert capsys.readouterr().out == ""
+
+
+def test_missing_dependencies_offer_one_locked_local_repair(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    from types import SimpleNamespace
+
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    available = {"jsonschema": False, "openpyxl": False, "docx": False}
+    confirmations: list[str] = []
+
+    monkeypatch.setattr(
+        wizard,
+        "module_present",
+        lambda name: available.get(name, True),
+    )
+    monkeypatch.setattr(wizard, "running_in_local_venv", lambda: True)
+
+    def confirm(term, prompt, **kwargs):
+        del term, kwargs
+        confirmations.append(prompt)
+        return True
+
+    def install(command, *, cwd, check):
+        assert command[:4] == [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+        ]
+        assert command[-2:] == ["-r", str(wizard.RUNTIME_REQUIREMENTS)]
+        assert cwd == wizard.REPO_ROOT
+        assert check is False
+        available.update({name: True for name in available})
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(loom_ui, "confirm", confirm)
+    monkeypatch.setattr(wizard.subprocess, "run", install)
+
+    core_ok, docx_ok = wizard.ensure_environment(
+        loom_ui.Term(plain=True),
+        assume_yes=False,
+    )
+    output = capsys.readouterr().out
+    assert core_ok is True
+    assert docx_ok is True
+    assert confirmations == ["Install the required Python packages now?"]
+    assert "One-time setup needed" in output
+    assert "jsonschema, openpyxl, python-docx" in output
+    assert "requirements-lock.txt" in output
+    assert "Environment ready" in output
+
+
+def test_new_release_notice_is_informative_and_never_installs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    import loom_ui
+    import release_check
+    import rubric_loom_wizard as wizard
+
+    cache = tmp_path / "release_check.json"
+    marked: list[str] = []
+    monkeypatch.setattr(wizard, "RELEASE_CACHE_PATH", cache)
+    monkeypatch.setattr(wizard, "installed_version", lambda: "1.2.1")
+    monkeypatch.setattr(
+        release_check,
+        "check_latest_release",
+        lambda **kwargs: release_check.ReleaseStatus(
+            state="update_available",
+            current_version="1.2.1",
+            latest_version="1.3.0",
+            latest_tag="v1.3.0",
+            release_name="Rubric Loom v1.3.0",
+            release_url=(
+                "https://github.com/timebeing92/"
+                "brightspace-rubric-bundle/releases/tag/v1.3.0"
+            ),
+        ),
+    )
+    monkeypatch.setattr(release_check, "notice_is_due", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        release_check,
+        "mark_notified",
+        lambda path, *, latest_version: marked.append(latest_version),
+    )
+
+    wizard.report_release_check(
+        loom_ui.Term(plain=True),
+        force=False,
+        offer_open=False,
+    )
+    output = capsys.readouterr().out
+    assert "A newer Rubric Loom release is available" in output
+    assert "v1.2.1" in output
+    assert "v1.3.0" in output
+    assert "Nothing was installed" in output
+    assert marked == ["1.3.0"]
 
 
 # ---------------------------------------------------------------------------
@@ -527,6 +642,7 @@ class PtyWizard:
         env = dict(os.environ)
         env["TERM"] = "xterm-256color"
         env["RUBRIC_LOOM_STATE"] = str(state)
+        env["RUBRIC_LOOM_NO_RELEASE_CHECK"] = "1"
         env.pop("NO_COLOR", None)
         if env_overrides:
             env.update(env_overrides)
@@ -589,23 +705,14 @@ class PtyWizard:
 
 @pytestmark_pty
 def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
-    """The full family experience: splash (self-completing), doctor,
-    guided prompts, live board with flavor, and the bound-cloth card."""
+    """The full journey keeps art, checks setup quietly, and proceeds
+    directly into the source/review/run flow."""
     out_dir = tmp_path / "run"
     session = PtyWizard(
         ["--source", str(FIXTURE), "--output-dir", str(out_dir)],
         state=tmp_path / "state.json",
     )
     session.wait_for(b"R U B R I C   L O O M")
-    # The landing orients before anything runs: what it is, what you
-    # bring, how to steer - then a named-action Return.
-    session.wait_for(b"What would you like to do?")
-    session.wait_for(b"Unravel")
-    session.wait_for(b"Rubric Loom has no AI component")
-    session.wait_for(b"Press Return to check the workshop")
-    session.send(b"\r")
-    session.wait_for(b"The loom is threaded.")
-    session.wait_for(b"[workshop]")  # the journey trail marks the phase
     session.wait_for(b"Ready to unravel")
     session.wait_for(b"tiny_rubrics_export__rubrics.docx")
     session.wait_for(b"Start Unravel?")
@@ -617,7 +724,8 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
     assert code == 0
     assert (out_dir / "tiny_rubrics_export__rubrics.docx").is_file()
     stream = session.stream.decode("utf-8", "replace")
-    assert "The workshop" in stream
+    assert "Python interpreter" not in stream
+    assert "Rubric Loom doctor" not in stream
     assert "Review the output" in stream
     assert "The unravelling" in stream
     assert "Reading the weave" in stream  # flavor from the approved sample
@@ -629,11 +737,20 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
 @pytestmark_pty
 def test_pty_landing_q_leaves_without_running(tmp_path: Path) -> None:
     session = PtyWizard([], state=tmp_path / "state.json")
-    session.wait_for(b"Press Return to check the workshop")
+    session.wait_for(b"R U B R I C   L O O M")
+    session.wait_for(b"Choose what you want to do")
+    session.wait_for(b"UNRAVEL")
+    session.wait_for(b"WEAVE")
+    session.wait_for(b"What do you want to do?")
     session.send(b"q\r")
     code = session.finish()
     assert code == 0
     assert b"nothing was run." in session.stream
+    assert b"Python interpreter" not in session.stream
+    assert b"\x1b[38;5;137m" in session.stream  # wood frame in the Loom art
+    assert session.stream.index(b"R U B R I C   L O O M") < session.stream.index(
+        b"Choose what you want to do"
+    )
 
 
 @pytestmark_pty

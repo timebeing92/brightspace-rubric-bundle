@@ -17,13 +17,16 @@ environment error, 3 no rubric evidence in the source, 130 interrupted.
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
 import json
 import os
 import re
 import shlex
 import stat
+import subprocess
 import sys
+import webbrowser
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -31,15 +34,31 @@ from xml.etree import ElementTree as ET
 import loom_art
 import loom_progress
 import loom_ui
+import release_check
 import run_rubric_bundle as unravel
-import rubric_loom_weave as weave
+import rubric_loom_templates as templates
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
 ORCHESTRATOR = SCRIPTS / "run_rubric_bundle.py"
+WEAVE_ORCHESTRATOR = SCRIPTS / "run_weave_bundle.py"
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "tiny_rubrics_export"
 INPUT_LANE = REPO_ROOT / "input"
 LOG_NAME = "unravel_wizard.log"
+RUNTIME_REQUIREMENTS = REPO_ROOT / "requirements-lock.txt"
+VERSION_PATH = REPO_ROOT / "VERSION"
+RELEASE_CACHE_PATH = Path(
+    os.environ.get(
+        "RUBRIC_LOOM_RELEASE_CACHE",
+        str(REPO_ROOT / "output" / "update-cache" / "release_check.json"),
+    )
+)
+SUPPORTED_PYTHON = (3, 11), (3, 14)
+RUNTIME_MODULES = (
+    ("jsonschema", "jsonschema"),
+    ("openpyxl", "openpyxl"),
+    ("docx", "python-docx"),
+)
 
 # Remembered answers live in the gitignored output/ lane; the env override
 # exists so tests never touch the operator's remembered choices.
@@ -88,7 +107,7 @@ ACCEPTS_LINE = (
     "Components > Export Course Components creates the ZIP."
 )
 
-PHASES = ("workshop", "source", "review", "unravelling")
+PHASES = ("source", "review", "unravelling")
 
 
 def trail(term: loom_ui.Term, current: str) -> str:
@@ -106,35 +125,6 @@ def trail(term: loom_ui.Term, current: str) -> str:
 def guidance(term: loom_ui.Term, text: str) -> None:
     """One quiet what-do-I-do-here line. Informative copy stays plain."""
     print("  " + term.dim(text))
-
-
-def landing(term: loom_ui.Term) -> bool:
-    """The welcome screen: what this is, what you bring, what you get,
-    and how to steer. Returns False when the operator leaves here."""
-    rows: list[tuple[str, str]] = [
-        ("Unravel", "Read rubrics from a Brightspace course export."),
-        ("  Bring", "An export ZIP, unpacked export, or rubrics_d2l.xml."),
-        ("  Get", "A reviewer DOCX, editing workbook, and structured JSON."),
-        ("", ""),
-        ("Weave", "Build an import package from a completed rubric."),
-        ("  Bring", "A supported Word, Markdown, or JSON rubric."),
-        ("  Get", "A validated, rubric-only Brightspace import ZIP."),
-        ("", ""),
-        ("", "Rubric Loom has no AI component. Deterministic Python runs"),
-        ("", "locally against known D2L structures; nothing is imported."),
-    ]
-    print(loom_ui.card(term, "What would you like to do?", rows))
-    print(trail(term, "workshop"))
-    guidance(
-        term,
-        "Return accepts a recommended choice. You will review file names and "
-        "the save folder before anything is written.",
-    )
-    reply = loom_ui.prompt_text(term, "Press Return to check the workshop (q leaves)")
-    if isinstance(reply, str) and reply.strip().lower() in {"q", "quit"}:
-        print("  nothing was run.")
-        return False
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -334,10 +324,13 @@ def module_present(name: str) -> bool:
         return False
 
 
+def python_supported() -> bool:
+    version = sys.version_info[:2]
+    return SUPPORTED_PYTHON[0] <= version < SUPPORTED_PYTHON[1]
+
+
 def default_bundle_dir(label: str) -> Path:
-    """Repo-anchored default so the doctor's output-lane check describes
-    the lane the run will actually use, from any cwd (AGENTS.md keeps
-    generated artifacts in the repo's gitignored output/ lane)."""
+    """Repo-anchored default for the gitignored output lane."""
     return REPO_ROOT / "output" / f"{label}__rubric_bundle"
 
 
@@ -360,19 +353,18 @@ def output_lane_write_anchor(output_lane: Path) -> tuple[Path, bool]:
         return current, os.access(current, os.W_OK | os.X_OK)
 
 
-def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
-    """Print the checklist; return (core_ok, docx_ok)."""
+def environment_checks() -> list[tuple[str, bool, str, bool]]:
+    """Return setup facts as (label, ok, detail, blocks_core)."""
     version = ".".join(str(part) for part in sys.version_info[:3])
     checks: list[tuple[str, bool, str, bool]] = [
-        # (label, ok, detail, core)
-        ("Python interpreter", True, version, True),
+        ("Python 3.11–3.13", python_supported(), version, True),
         ("jsonschema (contract validation)", module_present("jsonschema"), "", True),
         ("openpyxl (workbook writer)", module_present("openpyxl"), "", True),
         ("python-docx (reviewer document)", module_present("docx"), "", False),
         ("Unravel orchestrator", ORCHESTRATOR.is_file(), "scripts/run_rubric_bundle.py", True),
         (
             "Weave orchestrator",
-            weave.ORCHESTRATOR.is_file(),
+            WEAVE_ORCHESTRATOR.is_file(),
             "scripts/run_weave_bundle.py",
             True,
         ),
@@ -402,6 +394,12 @@ def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
     checks.append(
         ("output lane writable", output_ok, output_detail, True)
     )
+    return checks
+
+
+def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
+    """Print the full diagnostic checklist; return (core_ok, docx_ok)."""
+    checks = environment_checks()
 
     core_ok = True
     docx_ok = True
@@ -428,6 +426,271 @@ def run_doctor(term: loom_ui.Term) -> tuple[bool, bool]:
             )
         )
     return core_ok, docx_ok
+
+
+def missing_runtime_packages() -> list[str]:
+    return [
+        package
+        for module, package in RUNTIME_MODULES
+        if not module_present(module)
+    ]
+
+
+def local_venv_python() -> Path:
+    if os.name == "nt":
+        return REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    return REPO_ROOT / ".venv" / "bin" / "python"
+
+
+def running_in_local_venv() -> bool:
+    try:
+        return Path(sys.executable).resolve() == local_venv_python().resolve()
+    except OSError:
+        return False
+
+
+def repair_runtime_dependencies(
+    term: loom_ui.Term,
+    packages: list[str],
+    *,
+    assume_yes: bool,
+) -> bool:
+    """Offer one bounded repair, using the lock file.
+
+    The ordinary launcher already runs inside the repo-local environment. A
+    direct system-Python launch creates that same local environment and
+    restarts into it rather than installing packages globally.
+    """
+    target = (
+        "the local .venv"
+        if running_in_local_venv()
+        else "a local .venv inside this Rubric Loom folder"
+    )
+    print()
+    print(
+        loom_ui.card(
+            term,
+            "One-time setup needed",
+            [
+                ("Missing", ", ".join(packages)),
+                ("Install into", target),
+                ("Source", "requirements-lock.txt"),
+                ("", ""),
+                ("", "Nothing is installed outside this Rubric Loom folder."),
+            ],
+        )
+    )
+    if not loom_ui.confirm(
+        term,
+        "Install the required Python packages now?",
+        default=True,
+        assume_yes=assume_yes,
+    ):
+        print("  setup was skipped; nothing was run.")
+        return False
+
+    if running_in_local_venv():
+        command = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-r",
+            str(RUNTIME_REQUIREMENTS),
+        ]
+    else:
+        command = [
+            sys.executable,
+            str(SCRIPTS / "bootstrap_env.py"),
+            "--locked",
+        ]
+    print(
+        loom_ui.status_line(
+            term,
+            "run",
+            "Installing the Rubric Loom dependencies",
+            target,
+        )
+    )
+    result = subprocess.run(command, cwd=REPO_ROOT, check=False)
+    if result.returncode != 0:
+        print(
+            loom_ui.status_line(
+                term,
+                "bad",
+                "Setup did not finish",
+                "the installer output above says why",
+            )
+        )
+        return False
+
+    if not running_in_local_venv():
+        python = local_venv_python()
+        if not python.is_file():
+            print(
+                loom_ui.status_line(
+                    term, "bad", "Setup did not create the local Python environment"
+                )
+            )
+            return False
+        print(loom_ui.status_line(term, "ok", "Environment ready", "restarting"))
+        os.execv(
+            str(python),
+            [str(python), str(Path(__file__).resolve()), *sys.argv[1:]],
+        )
+        return False  # pragma: no cover - os.execv replaces this process
+
+    importlib.invalidate_caches()
+    if missing_runtime_packages():
+        print(
+            loom_ui.status_line(
+                term,
+                "bad",
+                "Setup completed but required packages are still unavailable",
+            )
+        )
+        return False
+    print(loom_ui.status_line(term, "ok", "Environment ready"))
+    return True
+
+
+def ensure_environment(
+    term: loom_ui.Term,
+    *,
+    assume_yes: bool,
+) -> tuple[bool, bool]:
+    """Quietly verify setup, offering repair only when packages are missing."""
+    packages = missing_runtime_packages()
+    if packages and not repair_runtime_dependencies(
+        term, packages, assume_yes=assume_yes
+    ):
+        # A missing python-docx alone remains a supported reduced Unravel
+        # environment. Core package failures must stop.
+        core_missing = any(name != "python-docx" for name in packages)
+        if core_missing:
+            return False, False
+
+    checks = environment_checks()
+    failures = [
+        (label, detail)
+        for label, ok, detail, core in checks
+        if core and not ok
+    ]
+    docx_ok = module_present("docx")
+    if failures:
+        rows = [(label, detail or "missing") for label, detail in failures]
+        rows.extend(
+            [
+                ("", ""),
+                ("Details", "rubric_loom_wizard.py --doctor"),
+            ]
+        )
+        print()
+        print(loom_ui.card(term, "The Loom cannot start yet", rows))
+        return False, docx_ok
+    if not docx_ok:
+        print(
+            loom_ui.status_line(
+                term,
+                "warn",
+                "Reviewer DOCX unavailable",
+                "Unravel will still create the workbook and JSON",
+            )
+        )
+    return True, docx_ok
+
+
+def installed_version() -> str:
+    try:
+        return VERSION_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def report_release_check(
+    term: loom_ui.Term,
+    *,
+    force: bool,
+    offer_open: bool,
+) -> None:
+    """Report a newer published release without blocking the current Loom."""
+    current = installed_version()
+    status = release_check.check_latest_release(
+        current_version=current,
+        cache_path=RELEASE_CACHE_PATH,
+        force=force,
+    )
+    if status.state == "unavailable":
+        if force:
+            print(
+                loom_ui.card(
+                    term,
+                    "Release check unavailable",
+                    [
+                        ("Installed", current or "(version file unavailable)"),
+                        (
+                            "",
+                            "GitHub could not be checked. The installed Loom "
+                            "is still usable.",
+                        ),
+                    ],
+                )
+            )
+        return
+
+    if not status.update_available:
+        if force:
+            title = (
+                "This checkout is newer than the latest published release"
+                if status.state == "ahead"
+                else "Rubric Loom is up to date"
+            )
+            print(
+                loom_ui.card(
+                    term,
+                    title,
+                    [
+                        ("Installed", f"v{current}"),
+                        ("Latest release", f"v{status.latest_version}"),
+                    ],
+                )
+            )
+        return
+
+    if not force and not release_check.notice_is_due(
+        RELEASE_CACHE_PATH,
+        latest_version=status.latest_version,
+    ):
+        return
+
+    rows = [
+        ("Installed", f"v{current}"),
+        ("Available", term.bold(f"v{status.latest_version}")),
+    ]
+    if status.release_name and status.release_name != status.latest_tag:
+        rows.append(("Release", status.release_name))
+    rows.extend(
+        [
+            ("Page", status.release_url),
+            ("", ""),
+            ("", "The current Loom remains usable. Nothing was installed."),
+        ]
+    )
+    print()
+    print(loom_ui.card(term, "A newer Rubric Loom release is available", rows))
+    release_check.mark_notified(
+        RELEASE_CACHE_PATH,
+        latest_version=status.latest_version,
+    )
+    if not offer_open:
+        return
+    if loom_ui.confirm(term, "Open the GitHub release page?", default=False):
+        try:
+            opened = webbrowser.open(status.release_url)
+        except OSError:
+            opened = False
+        if not opened:
+            print("  Open this page: " + status.release_url)
 
 
 # ---------------------------------------------------------------------------
@@ -799,7 +1062,7 @@ def failure_card(
             "the workbook and contract without the reviewer document."
         )
     rows.append(("log", relative_display(log_path)))
-    rows.append(("doctor", "rubric_loom_wizard.py --doctor checks the workshop"))
+    rows.append(("doctor", "rubric_loom_wizard.py --doctor shows setup diagnostics"))
     print(loom_ui.card(term, "the scroll", rows))
 
 
@@ -820,7 +1083,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--yes", action="store_true", help="accept defaults; no prompts (requires --source)")
     parser.add_argument("--brisk", action="store_true", help="skip the splash and the step-board pacing")
     parser.add_argument("--plain", action="store_true", help="plain text: no color, art, or in-place redraws")
-    parser.add_argument("--doctor", action="store_true", help="run the workshop checks and exit")
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="show the full setup diagnostic checklist and exit",
+    )
+    parser.add_argument(
+        "--check-for-updates",
+        action="store_true",
+        help="check GitHub for the latest published Rubric Loom release, then exit",
+    )
+    parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        help="skip the once-daily automatic release check",
+    )
     template_actions = parser.add_mutually_exclusive_group()
     template_actions.add_argument(
         "--list-templates",
@@ -829,7 +1106,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     template_actions.add_argument(
         "--copy-template",
-        choices=weave.TEMPLATE_NAMES,
+        choices=tuple(templates.EXPECTED_MEDIA_TYPES),
         help="copy one exact release-pinned Weave template",
     )
     parser.add_argument(
@@ -882,7 +1159,7 @@ def _start_unravel(
     use_docx: bool,
 ) -> int:
     save_door_state("unravel", {"source": str(source), "docx": use_docx})
-    print(loom_ui.heading(term, "The unravelling", "4 of 4"))
+    print(loom_ui.heading(term, "The unravelling", "3 of 3"))
     print(trail(term, "unravelling"))
     guidance(term, "The board is live - real steps, real timings. Ctrl-C stops cleanly.")
     min_step = 0.0 if (args.brisk or term.plain) else MIN_STEP_SECONDS
@@ -914,7 +1191,7 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
     """--yes path: flags decide, remembered answers never do (the
     family's --yes rule); headless runs mirror the CLI exactly."""
     source = args.source.expanduser()
-    print(loom_ui.heading(term, "The source", "2 of 4"))
+    print(loom_ui.heading(term, "The source", "1 of 3"))
     print(trail(term, "source"))
     print(loom_ui.status_line(term, "ok", f"source: {relative_display(source)}"))
     if not source.exists():
@@ -925,7 +1202,7 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
     if note:
         print(loom_ui.status_line(term, "warn", note))
 
-    print(loom_ui.heading(term, "Review the output", "3 of 4"))
+    print(loom_ui.heading(term, "Review the output", "2 of 3"))
     print(trail(term, "review"))
     label = (
         unravel.sanitize_label(args.label) if args.label
@@ -980,7 +1257,7 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
 
     while True:
         if step == "source":
-            print(loom_ui.heading(term, "The source", "2 of 4"))
+            print(loom_ui.heading(term, "The source", "1 of 3"))
             print(trail(term, "source"))
             guidance(
                 term,
@@ -1047,7 +1324,7 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
             assert label is not None
             assert out_dir is not None
             assert use_docx is not None
-            print(loom_ui.heading(term, "Review the output", "3 of 4"))
+            print(loom_ui.heading(term, "Review the output", "2 of 3"))
             print(trail(term, "review"))
             guidance(
                 term,
@@ -1136,12 +1413,18 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
     print(
         loom_ui.card(
             term,
-            "Choose a door",
+            "Choose what you want to do",
             [
-                ("Unravel", "Course export → review DOCX, workbook, and JSON"),
-                ("Weave", "Completed rubric → Brightspace rubric import ZIP"),
+                ("UNRAVEL", "Read rubrics from an existing Brightspace export."),
+                ("  Bring", "A course-export ZIP, unpacked export, or rubrics_d2l.xml."),
+                ("  Get", "A review DOCX, editing workbook, and structured JSON."),
                 ("", ""),
-                ("", "Both doors run locally and show exact outputs before writing."),
+                ("WEAVE", "Build a rubric-only Brightspace import package."),
+                ("  Bring", "A completed Word, Markdown, or JSON rubric."),
+                ("  Get", "A validated import ZIP with review and run receipts."),
+                ("", ""),
+                ("", "Rubric Loom has no AI component. Both doors run locally."),
+                ("", "You will review exact outputs before anything is written."),
             ],
         )
     )
@@ -1152,11 +1435,11 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
             [
                 (
                     "unravel",
-                    "Unravel rubrics from an existing course export",
+                    "UNRAVEL — read rubrics from a course export",
                 ),
                 (
                     "weave",
-                    "Weave a completed rubric into an import package",
+                    "WEAVE — build an import package from a completed rubric",
                 ),
                 ("q", "Leave the loom without running"),
             ],
@@ -1171,9 +1454,18 @@ def main(argv: list[str] | None = None) -> int:
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
     template_action = bool(args.list_templates or args.copy_template)
 
+    if args.check_for_updates:
+        loom_art.banner(term)
+        report_release_check(
+            term,
+            force=True,
+            offer_open=interactive and not args.yes,
+        )
+        return 0
+
     if args.doctor:
         loom_art.banner(term)
-        print(loom_ui.heading(term, "The workshop", "doctor"))
+        print(loom_ui.heading(term, "Rubric Loom doctor"))
         core_ok, _ = run_doctor(term)
         return 0 if core_ok else 2
 
@@ -1206,9 +1498,8 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        return weave.run_template_headless(term, args)
 
-    if args.yes and args.source is None:
+    if not template_action and args.yes and args.source is None:
         print(
             "rubric_loom_wizard: --yes needs --source PATH (defaults answer "
             "prompts; the source has no default)",
@@ -1247,7 +1538,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     headless = args.yes and args.source is not None
-    if not interactive and not headless:
+    if not template_action and not interactive and not headless:
         print(
             "rubric_loom_wizard: not a terminal; pass --source PATH --yes "
             "(and optionally --output-dir/--label/--no-docx) to run "
@@ -1257,28 +1548,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        if interactive and not args.brisk and not term.plain:
-            loom_art.splash(term, animate=True)
-        else:
-            loom_art.banner(term)
-
-        if interactive and not args.yes and not args.brisk:
-            if not landing(term):
-                return 0
-
-        # -- The workshop -------------------------------------------------
-        print(loom_ui.heading(term, "The workshop", "setup"))
-        print("  " + term.bold("[workshop]") + term.dim("  ·  shared checks for both doors"))
-        guidance(term, "The loom checks its own equipment; nothing has run yet.")
-        core_ok, docx_ok = run_doctor(term)
-        if not core_ok:
-            return 2
+        if not template_action:
+            if interactive and not args.brisk and not term.plain:
+                loom_art.splash(term, animate=True)
+            else:
+                loom_art.banner(term)
 
         door = args.door
         if door is None:
             # Compatibility contract: every pre-R1 invocation with a source
             # remains an Unravel invocation. Only a source-less guided launch
-            # opens the new door chooser.
+            # opens the art-led two-door landing page.
             door = (
                 choose_door(term, load_state())
                 if interactive and not args.yes and args.source is None
@@ -1287,6 +1567,24 @@ def main(argv: list[str] | None = None) -> int:
         if door == "q":
             print("  nothing was run.")
             return 0
+
+        core_ok, docx_ok = ensure_environment(term, assume_yes=args.yes)
+        if not core_ok:
+            return 2
+        if (
+            interactive
+            and not args.yes
+            and not args.no_update_check
+            and os.environ.get("RUBRIC_LOOM_NO_RELEASE_CHECK") is None
+        ):
+            report_release_check(term, force=False, offer_open=True)
+
+        # jsonschema is now known to be available. Keep this import after the
+        # repair gate so a partial environment can still reach the installer.
+        import rubric_loom_weave as weave
+
+        if template_action:
+            return weave.run_template_headless(term, args)
 
         if door == "weave":
             saver = lambda values: save_door_state("weave", values)

@@ -48,7 +48,7 @@ ALLOWED_SUFFIXES = {".docx", ".json", ".md", ".markdown"}
 PREFLIGHT_SCHEMA = "coursecraft.rubric_authoring_preflight/1"
 TEMPLATE_NAMES = tuple(templates.EXPECTED_MEDIA_TYPES)
 
-PHASES = ("workshop", "source", "preflight", "review", "weaving")
+PHASES = ("source", "preflight", "review", "weaving")
 VOICE_BOUND = "The cloth is bound ✦"
 VOICE_SNAPPED = "A thread snapped — the scroll below tells why."
 FLAVOR = {
@@ -961,7 +961,7 @@ def run_build(
             "--progress-events",
         ]
     )
-    print(loom_ui.heading(term, "The weaving", "5 of 5"))
+    print(loom_ui.heading(term, "The weaving", "4 of 4"))
     print(trail(term, "weaving"))
     guidance(term, "The board is live — real producer steps and timings. Ctrl-C stops cleanly.")
     # The pinned producer requires a clean output destination. Keep the log
@@ -1106,7 +1106,7 @@ def run_headless(
     if args.context_dir is not None:
         args.context_dir = args.context_dir.expanduser().absolute()
     args.source = source
-    print(loom_ui.heading(term, "The source", "2 of 5"))
+    print(loom_ui.heading(term, "The source", "1 of 4"))
     print(trail(term, "source"))
     if not source.is_file():
         print(loom_ui.status_line(term, "bad", f"source not found: {source}"))
@@ -1115,7 +1115,7 @@ def run_headless(
         print(loom_ui.status_line(term, "bad", "Weave accepts DOCX, Markdown, or JSON files"))
         return 2
 
-    print(loom_ui.heading(term, "Check the rubric · producer preflight", "3 of 5"))
+    print(loom_ui.heading(term, "Check the rubric · producer preflight", "2 of 4"))
     print(trail(term, "preflight"))
     _, preflight = invoke_preflight(args)
     preflight_card(term, preflight)
@@ -1145,7 +1145,7 @@ def run_headless(
     if destination_problem:
         print(loom_ui.status_line(term, "bad", destination_problem))
         return 2
-    print(loom_ui.heading(term, "Review and build", "4 of 5"))
+    print(loom_ui.heading(term, "Review and build", "3 of 4"))
     print(trail(term, "review"))
     print(loom_ui.card(term, "Ready to weave", _commission_rows(args, source, label, out_dir)))
     print("  ? Named final approval: WEAVE (--approve-weave)")
@@ -1198,7 +1198,7 @@ def run_interactive(
     while True:
         args.allow_even_spacing = explicit_even_spacing
         args.allow_equal_weights = explicit_equal_weights
-        print(loom_ui.heading(term, "The source", "2 of 5"))
+        print(loom_ui.heading(term, "The source", "1 of 4"))
         print(trail(term, "source"))
         guidance(
             term,
@@ -1241,7 +1241,7 @@ def run_interactive(
 
         print(
             loom_ui.heading(
-                term, "Check the rubric · producer preflight", "3 of 5"
+                term, "Check the rubric · producer preflight", "2 of 4"
             )
         )
         print(trail(term, "preflight"))
@@ -1277,7 +1277,7 @@ def run_interactive(
             print(loom_ui.status_line(term, "bad", str(exc)))
             return 2
 
-        print(loom_ui.heading(term, "Review and build", "4 of 5"))
+        print(loom_ui.heading(term, "Review and build", "3 of 4"))
         print(trail(term, "review"))
         restart_preflight = False
         while True:

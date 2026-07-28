@@ -51,6 +51,7 @@ TERMINAL_RUNTIME_FILES = (
     "scripts/loom_progress.py",
     "scripts/loom_ui.py",
     "scripts/loom_art.py",
+    "scripts/release_check.py",
     "launch_rubric_loom.command",
 )
 INSTALL_RUNTIME_FILES = (
@@ -373,6 +374,7 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
         WEAVE_TERMINAL_ENTRY_POINT: (
             "--door",
             "--approve-weave",
+            "--check-for-updates",
             "--list-templates",
             "--copy-template",
             "--template-destination",
@@ -392,6 +394,10 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
             "upstream_path",
         ),
         "scripts/loom_progress.py": ("coursecraft.progress/1",),
+        "scripts/release_check.py": (
+            "brightspace-rubric-bundle/releases/latest",
+            "coursecraft.rubric_loom_release_check/1",
+        ),
         "scripts/bootstrap_env.py": (
             "--dev",
             "requirements.txt",

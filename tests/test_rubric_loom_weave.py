@@ -594,12 +594,13 @@ def test_weave_only_flags_require_the_weave_door(tmp_path: Path) -> None:
     assert not output.exists()
 
 
-def test_launcher_has_one_two_door_surface_and_is_valid_shell() -> None:
+def test_launcher_opens_the_one_art_led_tui_and_is_valid_shell() -> None:
     launcher = REPO_ROOT / "launch_rubric_loom.command"
     source = launcher.read_text(encoding="utf-8")
     assert source.count("scripts/rubric_loom_wizard.py") == 1
-    assert "Demonstration unravel" in source
-    assert "Demonstration weave" in source
+    assert "scripts/bootstrap_env.py\" --locked" in source
+    assert "Workshop doctor" not in source
+    assert "Selection [1]" not in source
     result = subprocess.run(
         ["bash", "-n", str(launcher)],
         cwd=REPO_ROOT,

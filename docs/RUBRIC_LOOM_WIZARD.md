@@ -7,8 +7,8 @@ Weave. `launch_rubric_loom.command` is the single macOS launcher.
 .venv/bin/python scripts/rubric_loom_wizard.py
 ```
 
-The shared workshop checks both orchestrators and contracts. A guided launch
-then chooses a door:
+Quiet startup checks cover both orchestrators, their contracts, and the
+required Python packages. A guided launch starts by choosing a door:
 
 - **Unravel** accepts a course export ZIP, unpacked export folder, or
   `rubrics_d2l.xml`. Its shallow export peek, DOCX/workbook/JSON options,
@@ -25,10 +25,29 @@ Both doors use `loom_progress.py` to consume the orchestrators'
 and final result handling; the shared consumer knows no rubric semantics and
 infers no artifacts.
 
-## Guided terminal flow
+## Landing and guided terminal flow
 
-The guided flow uses the same review-before-run pattern as the Blueprint
-Wizard:
+The normal terminal opens with the color Loom artwork and two explicit
+choices: **UNRAVEL** or **WEAVE**. There is no launcher menu and no doctor
+screen in front of those choices. Setup checks run quietly after the choice;
+if a required package is missing, the Loom offers to install the pinned
+runtime dependencies into its local `.venv`. The complete diagnostic
+checklist remains available through `--doctor`.
+
+After setup is known to be usable, the guided TUI performs a cached,
+non-blocking check for the latest published GitHub release. It checks at most
+once per day and says nothing when the installed version is current or GitHub
+is unavailable. A newer release produces an informational card and an
+optional “open release page” prompt. The checker never downloads, installs,
+or replaces the current Loom.
+
+Use `--check-for-updates` to force and report a check without beginning a
+journey. Use `--no-update-check` to skip the automatic check for that launch.
+Only safe `github.com/timebeing92/brightspace-rubric-bundle/releases/...`
+links are offered.
+
+After the landing page, the guided flow uses the same review-before-run
+pattern as the Blueprint Wizard:
 
 1. Choose what you want to do: read an existing export with **Unravel**, or
    package a completed rubric with **Weave**.
@@ -152,9 +171,9 @@ and remains protected from a containing `--force` output target.
   lane (or `RUBRIC_LOOM_LOG_DIR`); the logger refuses symlink targets before
   launching the producer.
 
-The launcher offers guided use, an Unravel demonstration, a Weave
-demonstration, and the shared doctor. Its existing first-run environment
-bootstrap remains unchanged.
+The launcher performs the existing first-run `.venv` bootstrap and then opens
+the art-led two-door TUI directly. Unravel and Weave demonstrations remain
+inside their respective source choosers.
 
 ## Ownership boundary
 
