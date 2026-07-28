@@ -17,6 +17,7 @@ environment error, 3 no rubric evidence in the source, 130 interrupted.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import importlib
 import importlib.util
 import json
@@ -108,6 +109,28 @@ ACCEPTS_LINE = (
 )
 
 PHASES = ("source", "review", "unravelling")
+EXPORT_MARKERS = ("imsmanifest.xml", unravel.RUBRIC_XML_NAME)
+
+
+@dataclass(frozen=True)
+class BulkDiscovery:
+    """Read-only inventory of one folder selected as a batch container."""
+
+    root: Path
+    sources: tuple[Path, ...]
+    ignored: tuple[Path, ...]
+    problem: str = ""
+    collisions: tuple[tuple[str, tuple[Path, ...]], ...] = ()
+
+
+@dataclass(frozen=True)
+class BulkOutcome:
+    """One attempted batch item and the producer-owned result it returned."""
+
+    source: Path
+    output_dir: Path
+    status: str
+    return_code: int
 
 
 def trail(term: loom_ui.Term, current: str) -> str:
@@ -696,6 +719,136 @@ def report_release_check(
 # ---------------------------------------------------------------------------
 # Source selection and cards
 # ---------------------------------------------------------------------------
+def _regular_file(path: Path) -> bool:
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
+
+
+def _contains_export_marker(folder: Path) -> bool:
+    """Whether one immediate batch child resembles an unpacked export.
+
+    The marker must be directly inside the child. This keeps a directory that
+    merely contains deeper folders from being mistaken for one course export.
+    """
+
+    return any(_regular_file(folder / marker) for marker in EXPORT_MARKERS)
+
+
+def _direct_export_marker(folder: Path) -> bool:
+    """A marker directly in the selected root means it is probably one export."""
+
+    return any(_regular_file(folder / marker) for marker in EXPORT_MARKERS)
+
+
+def _bulk_label_collisions(
+    sources: tuple[Path, ...],
+) -> tuple[tuple[str, tuple[Path, ...]], ...]:
+    groups: dict[str, list[Path]] = {}
+    labels: dict[str, str] = {}
+    for source in sources:
+        label = unravel.default_label(source)
+        key = label.casefold()
+        labels.setdefault(key, label)
+        groups.setdefault(key, []).append(source)
+    return tuple(
+        (labels[key], tuple(paths))
+        for key, paths in sorted(groups.items())
+        if len(paths) > 1
+    )
+
+
+def discover_bulk_sources(root: Path) -> BulkDiscovery:
+    """Inventory immediate ZIPs and immediate unpacked-export directories.
+
+    Symlinks are never batch inputs. A root that directly carries an export
+    marker is refused as an ambiguous single unpacked export. Corrupt ZIPs
+    remain candidates so the pinned producer can report their real failure.
+    """
+
+    try:
+        mode = root.lstat().st_mode
+    except FileNotFoundError:
+        return BulkDiscovery(root, (), (), "The batch folder does not exist.")
+    except OSError as exc:
+        return BulkDiscovery(
+            root, (), (), f"The batch folder could not be inspected: {exc}"
+        )
+    if stat.S_ISLNK(mode):
+        return BulkDiscovery(
+            root, (), (), "Choose a batch folder that is not a symbolic link."
+        )
+    if not stat.S_ISDIR(mode):
+        return BulkDiscovery(root, (), (), "The batch source must be a folder.")
+    if _direct_export_marker(root):
+        return BulkDiscovery(
+            root,
+            (),
+            (),
+            "This folder looks like one unpacked Brightspace export. "
+            "Choose Single Unravel for this folder, or choose its parent "
+            "as the Bulk Unravel source.",
+        )
+
+    sources: list[Path] = []
+    ignored: list[Path] = []
+    try:
+        children = sorted(root.iterdir(), key=lambda path: path.name.casefold())
+    except OSError as exc:
+        return BulkDiscovery(
+            root, (), (), f"The batch folder could not be read: {exc}"
+        )
+    for child in children:
+        if child.name.startswith("."):
+            ignored.append(child)
+            continue
+        try:
+            child_mode = child.lstat().st_mode
+        except OSError:
+            ignored.append(child)
+            continue
+        if stat.S_ISLNK(child_mode):
+            ignored.append(child)
+        elif stat.S_ISREG(child_mode) and child.suffix.lower() == ".zip":
+            sources.append(child)
+        elif stat.S_ISDIR(child_mode) and _contains_export_marker(child):
+            sources.append(child)
+        else:
+            ignored.append(child)
+
+    source_tuple = tuple(sources)
+    return BulkDiscovery(
+        root=root,
+        sources=source_tuple,
+        ignored=tuple(ignored),
+        collisions=_bulk_label_collisions(source_tuple),
+    )
+
+
+def default_bulk_dir(root: Path) -> Path:
+    label = unravel.sanitize_label(root.name or "batch")
+    return REPO_ROOT / "output" / f"{label}__bulk_unravel"
+
+
+def choose_unravel_mode(term: loom_ui.Term, *, allow_back: bool):
+    print()
+    return loom_ui.choose(
+        term,
+        "How many course exports do you want to unravel?",
+        [
+            ("single", "ONE EXPORT — read one ZIP, unpacked export, or rubric XML"),
+            (
+                "bulk",
+                "A FOLDER OF EXPORTS — read its immediate ZIPs and export folders",
+            ),
+            ("q", "Leave without running"),
+        ],
+        default="single",
+        allow_back=allow_back,
+    )
+
+
 def input_lane_candidates() -> list[Path]:
     if not INPUT_LANE.is_dir():
         return []
@@ -786,6 +939,107 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None:
         return candidates[int(choice) - 1]
 
 
+def pick_bulk_folder(term: loom_ui.Term, remembered: str) -> Path | None:
+    """Prompt for a batch container; discovery validates its contents later."""
+
+    guidance(
+        term,
+        "Choose a parent folder containing course-export ZIPs, unpacked "
+        "export folders, or a mixture of both.",
+    )
+    print()
+    while True:
+        raw = loom_ui.prompt_text(
+            term,
+            "Folder containing the course exports",
+            default=remembered,
+            allow_back=True,
+        )
+        if raw is loom_ui.BACK:
+            return None
+        candidate = parse_typed_path(str(raw))
+        if candidate is None:
+            print("  no batch folder was selected.")
+            return None
+        discovery = discover_bulk_sources(candidate)
+        if discovery.problem:
+            print(loom_ui.status_line(term, "bad", discovery.problem))
+            continue
+        if not discovery.sources:
+            print(
+                loom_ui.status_line(
+                    term,
+                    "bad",
+                    "No course-export ZIPs or unpacked export folders were "
+                    "found directly inside that folder.",
+                )
+            )
+            continue
+        return candidate
+
+
+def _preview_names(paths: tuple[Path, ...], *, limit: int = 8) -> str:
+    names = [path.name for path in paths[:limit]]
+    if len(paths) > limit:
+        names.append(f"… and {len(paths) - limit} more")
+    return ", ".join(names) if names else "none"
+
+
+def bulk_source_rows(discovery: BulkDiscovery) -> list[tuple[str, str]]:
+    zip_count = sum(
+        source.is_file() and source.suffix.lower() == ".zip"
+        for source in discovery.sources
+    )
+    folder_count = len(discovery.sources) - zip_count
+    rows = [
+        ("batch folder", relative_display(discovery.root)),
+        ("exports found", str(len(discovery.sources))),
+        ("  ZIP files", str(zip_count)),
+        ("  unpacked folders", str(folder_count)),
+        ("sources", _preview_names(discovery.sources)),
+        ("ignored", str(len(discovery.ignored))),
+    ]
+    if discovery.ignored:
+        rows.append(("  not included", _preview_names(discovery.ignored, limit=5)))
+    return rows
+
+
+def bulk_review_rows(
+    discovery: BulkDiscovery,
+    output_root: Path,
+    use_docx: bool,
+    args,
+    docx_ok: bool,
+) -> list[tuple[str, str]]:
+    rows = [
+        ("1. Batch folder", relative_display(discovery.root)),
+        ("   Exports", str(len(discovery.sources))),
+        ("   Included", _preview_names(discovery.sources)),
+        ("2. Save folder", relative_display(output_root)),
+        ("3. Review DOCX", _review_docx_text(use_docx, args, docx_ok)),
+        ("", ""),
+        (
+            "",
+            "Each export gets its own <course>__rubric_bundle folder. "
+            "Nothing is written until you press Return to start.",
+        ),
+    ]
+    return rows
+
+
+def bulk_collision_rows(
+    collisions: tuple[tuple[str, tuple[Path, ...]], ...],
+) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for label, paths in collisions:
+        rows.append((label, ", ".join(path.name for path in paths)))
+    rows += wrap_rows(
+        "These source names become the same safe output name. Rename one "
+        "source, then select the batch folder again."
+    )
+    return rows
+
+
 def peek_card(term: loom_ui.Term, source: Path, seen: dict) -> None:
     if not seen["readable"]:
         evidence_text = "not a readable zip archive"
@@ -874,6 +1128,87 @@ def unravel_destination_ready(term: loom_ui.Term, out_dir: Path) -> bool:
             loom_ui.confirm(
                 term,
                 "This folder already contains files. Replace matching Loom files?",
+                default=False,
+            )
+        )
+    return True
+
+
+def bulk_destination_problem(
+    source_root: Path,
+    output_root: Path,
+    sources: tuple[Path, ...],
+) -> str:
+    """Refuse ambiguous or unsafe batch destinations before the first write."""
+
+    source_absolute = source_root.expanduser().absolute()
+    output_absolute = output_root.expanduser().absolute()
+    try:
+        source_compare = source_absolute.resolve()
+        output_compare = output_absolute.resolve(strict=False)
+    except OSError as exc:
+        return f"The source and save paths could not be compared safely: {exc}"
+    if output_compare == source_compare or source_compare in output_compare.parents:
+        return "Choose a save folder outside the batch source folder."
+
+    anchor, writable = output_lane_write_anchor(output_absolute)
+    if not writable:
+        return f"The save path is not writable at {relative_display(anchor)}."
+
+    try:
+        mode = output_absolute.lstat().st_mode
+    except FileNotFoundError:
+        mode = 0
+    except OSError as exc:
+        return f"The save folder could not be inspected: {exc}"
+    if mode and stat.S_ISLNK(mode):
+        return "Choose a save folder that is not a symbolic link."
+    if mode and not stat.S_ISDIR(mode):
+        return "The save location is an existing file, not a folder."
+
+    for source in sources:
+        label = unravel.default_label(source)
+        destination = output_absolute / f"{label}__rubric_bundle"
+        try:
+            destination_mode = destination.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            return f"The course destination could not be inspected: {exc}"
+        if stat.S_ISLNK(destination_mode):
+            return (
+                f"The planned course destination is a symbolic link: "
+                f"{relative_display(destination)}"
+            )
+        if not stat.S_ISDIR(destination_mode):
+            return (
+                f"The planned course destination is an existing file: "
+                f"{relative_display(destination)}"
+            )
+    return ""
+
+
+def bulk_destination_ready(
+    term: loom_ui.Term,
+    source_root: Path,
+    output_root: Path,
+    sources: tuple[Path, ...],
+) -> bool:
+    problem = bulk_destination_problem(source_root, output_root, sources)
+    if problem:
+        print(loom_ui.status_line(term, "bad", problem))
+        return False
+    try:
+        occupied = output_root.is_dir() and any(output_root.iterdir())
+    except OSError:
+        print(loom_ui.status_line(term, "bad", "The save folder could not be read."))
+        return False
+    if occupied:
+        return bool(
+            loom_ui.confirm(
+                term,
+                "This batch folder already contains files. Replace matching "
+                "Loom files inside its course folders?",
                 default=False,
             )
         )
@@ -974,6 +1309,137 @@ def run_unravel(
         log_path,
     )
     return return_code if return_code else 1
+
+
+def _bulk_status(return_code: int) -> str:
+    if return_code == 0:
+        return "completed"
+    if return_code == 3:
+        return "no rubric evidence"
+    if return_code == 130:
+        return "interrupted"
+    return "failed"
+
+
+def bulk_summary_rows(
+    outcomes: tuple[BulkOutcome, ...],
+    output_root: Path,
+    total_sources: int,
+) -> list[tuple[str, str]]:
+    counts = {
+        status: sum(outcome.status == status for outcome in outcomes)
+        for status in ("completed", "no rubric evidence", "failed", "interrupted")
+    }
+    rows = [
+        ("exports found", str(total_sources)),
+        ("attempted", str(len(outcomes))),
+        ("completed", str(counts["completed"])),
+        ("no rubric evidence", str(counts["no rubric evidence"])),
+        ("failed", str(counts["failed"])),
+        ("interrupted", str(counts["interrupted"])),
+        ("save folder", relative_display(output_root)),
+    ]
+    for status in ("no rubric evidence", "failed", "interrupted"):
+        names = tuple(
+            outcome.source for outcome in outcomes if outcome.status == status
+        )
+        if names:
+            rows.append((f"  {status}", _preview_names(names, limit=5)))
+    remaining = total_sources - len(outcomes)
+    if remaining:
+        rows.append(("not attempted", str(remaining)))
+    return rows
+
+
+def bulk_return_code(outcomes: tuple[BulkOutcome, ...]) -> int:
+    if any(outcome.status == "interrupted" for outcome in outcomes):
+        return 130
+    if any(outcome.status == "failed" for outcome in outcomes):
+        return 1
+    completed = sum(outcome.status == "completed" for outcome in outcomes)
+    no_evidence = sum(
+        outcome.status == "no rubric evidence" for outcome in outcomes
+    )
+    if no_evidence and not completed:
+        return 3
+    if no_evidence:
+        return 1
+    return 0
+
+
+def run_bulk_unravel(
+    term: loom_ui.Term,
+    args,
+    source_root: Path,
+    sources: tuple[Path, ...],
+    output_root: Path,
+    use_docx: bool,
+) -> int:
+    """Sequentially drive the unchanged producer once per discovered export."""
+
+    state = door_state(load_state(), "unravel")
+    state.update({"bulk_source": str(source_root), "docx": use_docx})
+    save_door_state("unravel", state)
+    print(loom_ui.heading(term, "The bulk unravelling", "3 of 3"))
+    print(trail(term, "unravelling"))
+    guidance(
+        term,
+        "Exports run one at a time. A failed export does not prevent the "
+        "remaining exports from being checked. Ctrl-C stops before the next.",
+    )
+
+    outcomes: list[BulkOutcome] = []
+    for index, source in enumerate(sources, start=1):
+        label = unravel.default_label(source)
+        out_dir = output_root / f"{label}__rubric_bundle"
+        print()
+        print(
+            loom_ui.status_line(
+                term,
+                "ok",
+                f"[{index}/{len(sources)}] {source.name}",
+                f"into {relative_display(out_dir)}",
+            )
+        )
+        try:
+            return_code = run_unravel(
+                term,
+                source,
+                out_dir,
+                label,
+                use_docx,
+                min_step_seconds=0.0,
+            )
+        except OSError as exc:
+            print(
+                loom_ui.status_line(
+                    term,
+                    "bad",
+                    f"{source.name} could not be run",
+                    str(exc),
+                )
+            )
+            return_code = 1
+        outcome = BulkOutcome(
+            source=source,
+            output_dir=out_dir,
+            status=_bulk_status(return_code),
+            return_code=return_code,
+        )
+        outcomes.append(outcome)
+        if return_code == 130:
+            break
+
+    frozen_outcomes = tuple(outcomes)
+    print()
+    print(
+        loom_ui.card(
+            term,
+            "Bulk Unravel summary",
+            bulk_summary_rows(frozen_outcomes, output_root, len(sources)),
+        )
+    )
+    return bulk_return_code(frozen_outcomes)
 
 
 def results_card(
@@ -1410,6 +1876,173 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
             return _start_unravel(term, args, source, out_dir, label, use_docx)
 
 
+def _run_bulk_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
+    """Review one batch inventory, then drive the single-export producer."""
+
+    if args.label is not None:
+        print(
+            loom_ui.status_line(
+                term,
+                "bad",
+                "--label belongs to Single Unravel. Bulk Unravel derives one "
+                "collision-checked output name from each export.",
+            )
+        )
+        return 2
+
+    state = door_state(load_state(), "unravel")
+    source_root: Path | None = None
+    discovery: BulkDiscovery | None = None
+    output_root: Path | None = (
+        args.output_dir.expanduser().absolute()
+        if args.output_dir is not None
+        else None
+    )
+    automatic_output = args.output_dir is None
+    use_docx = (
+        not args.no_docx
+        and docx_ok
+        and bool(state.get("docx", True))
+    )
+    step = "source"
+
+    while True:
+        if step == "source":
+            print(loom_ui.heading(term, "The batch source", "1 of 3"))
+            print(trail(term, "source"))
+            print()
+            guidance(
+                term,
+                "Choose a folder that contains several Brightspace course "
+                "exports. This inventory is read-only and checks only its "
+                "immediate children.",
+            )
+            print()
+            remembered = (
+                str(source_root)
+                if source_root is not None
+                else str(state.get("bulk_source", ""))
+            )
+            picked = pick_bulk_folder(term, remembered)
+            if picked is None:
+                print("  nothing was run.")
+                return 0
+            source_root = picked
+            discovery = discover_bulk_sources(source_root)
+            if discovery.problem:
+                print(loom_ui.status_line(term, "bad", discovery.problem))
+                continue
+            if discovery.collisions:
+                print(
+                    loom_ui.card(
+                        term,
+                        "Bulk output names collide",
+                        bulk_collision_rows(discovery.collisions),
+                    )
+                )
+                continue
+            print(
+                loom_ui.card(
+                    term,
+                    "Bulk source check",
+                    bulk_source_rows(discovery),
+                )
+            )
+            guidance(
+                term,
+                "ZIPs and export-like folders are included. Everything else "
+                "is listed as ignored and will not be opened by the producer.",
+            )
+            if output_root is None or automatic_output:
+                output_root = default_bulk_dir(source_root)
+            step = "review"
+
+        elif step == "review":
+            assert source_root is not None
+            assert discovery is not None
+            assert output_root is not None
+            print(loom_ui.heading(term, "Review the batch", "2 of 3"))
+            print(trail(term, "review"))
+            guidance(
+                term,
+                "Review the inventory and destination once. Each export keeps "
+                "its own producer run, log, and output folder.",
+            )
+            print(
+                loom_ui.card(
+                    term,
+                    "Ready for Bulk Unravel",
+                    bulk_review_rows(
+                        discovery, output_root, use_docx, args, docx_ok
+                    ),
+                )
+            )
+            reply = loom_ui.review_choice(
+                term,
+                "Start Bulk Unravel?",
+                choices=("1", "2", "3"),
+                allow_back=True,
+            )
+            if reply == "q":
+                print("  nothing was run.")
+                return 0
+            if reply is loom_ui.BACK or reply == "1":
+                discovery = None
+                step = "source"
+                continue
+            if reply == "2":
+                changed = loom_ui.prompt_text(
+                    term,
+                    "Save folder for all course bundles",
+                    default=str(output_root),
+                    allow_back=True,
+                )
+                if changed is not loom_ui.BACK:
+                    parsed = parse_typed_path(str(changed))
+                    if parsed is not None:
+                        output_root = parsed.expanduser().absolute()
+                        automatic_output = False
+                continue
+            if reply == "3":
+                if args.no_docx or not docx_ok:
+                    print(
+                        loom_ui.status_line(
+                            term,
+                            "warn",
+                            _review_docx_text(False, args, docx_ok),
+                        )
+                    )
+                else:
+                    changed = loom_ui.confirm(
+                        term,
+                        "Create a reviewer DOCX for each successful export?",
+                        default=use_docx,
+                        allow_back=True,
+                    )
+                    if changed is not loom_ui.BACK:
+                        use_docx = bool(changed)
+                continue
+            if not bulk_destination_ready(
+                term,
+                source_root,
+                output_root,
+                discovery.sources,
+            ):
+                guidance(
+                    term,
+                    "Enter 2 on the review card to choose another save folder.",
+                )
+                continue
+            return run_bulk_unravel(
+                term,
+                args,
+                source_root,
+                discovery.sources,
+                output_root,
+                use_docx,
+            )
+
+
 def choose_door(term: loom_ui.Term, state: dict) -> str:
     remembered = str(state.get("last_door") or "unravel")
     if remembered not in {"unravel", "weave"}:
@@ -1420,9 +2053,9 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
             term,
             "Choose what you want to do",
             [
-                ("UNRAVEL", "Read rubrics from an existing Brightspace export."),
-                ("  Bring", "A course-export ZIP, unpacked export, or rubrics_d2l.xml."),
-                ("  Get", "A review DOCX, editing workbook, and structured JSON."),
+                ("UNRAVEL", "Read rubrics from one or more Brightspace exports."),
+                ("  Bring", "One export, or a folder containing several exports."),
+                ("  Get", "A review DOCX, editing workbook, and JSON for each course."),
                 ("", ""),
                 ("WEAVE", "Build a rubric-only Brightspace import package."),
                 ("  Bring", "A completed Word, Markdown, or JSON rubric."),
@@ -1440,7 +2073,7 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
             [
                 (
                     "unravel",
-                    "UNRAVEL — read rubrics from a course export",
+                    "UNRAVEL — read rubrics from one or more course exports",
                 ),
                 (
                     "weave",
@@ -1560,15 +2193,37 @@ def main(argv: list[str] | None = None) -> int:
                 loom_art.banner(term)
 
         door = args.door
+        unravel_mode = "single"
         if door is None:
             # Compatibility contract: every pre-R1 invocation with a source
             # remains an Unravel invocation. Only a source-less guided launch
             # opens the art-led two-door landing page.
-            door = (
-                choose_door(term, load_state())
-                if interactive and not args.yes and args.source is None
-                else "unravel"
-            )
+            if interactive and not args.yes and args.source is None:
+                while True:
+                    door = choose_door(term, load_state())
+                    if door != "unravel":
+                        break
+                    selected_mode = choose_unravel_mode(term, allow_back=True)
+                    if selected_mode is loom_ui.BACK:
+                        continue
+                    if selected_mode == "q":
+                        door = "q"
+                    else:
+                        unravel_mode = str(selected_mode)
+                    break
+            else:
+                door = "unravel"
+        elif (
+            door == "unravel"
+            and interactive
+            and not args.yes
+            and args.source is None
+        ):
+            selected_mode = choose_unravel_mode(term, allow_back=False)
+            if selected_mode == "q":
+                door = "q"
+            else:
+                unravel_mode = str(selected_mode)
         if door == "q":
             print("  nothing was run.")
             return 0
@@ -1599,6 +2254,8 @@ def main(argv: list[str] | None = None) -> int:
             return weave.run_interactive(term, args, state, saver)
         if args.yes:
             return _run_headless(term, args, docx_ok)
+        if unravel_mode == "bulk":
+            return _run_bulk_interactive(term, args, docx_ok)
         return _run_interactive(term, args, docx_ok)
     except KeyboardInterrupt:
         print("\n  interrupted — nothing else was run.", file=sys.stderr)

@@ -15,6 +15,11 @@ computer and opens through one of two doors:
 | **Unravel** | A Brightspace course-export ZIP, an unpacked export folder, or a bare `rubrics_d2l.xml` | A review workbook, structured rubric JSON, and a reviewer DOCX |
 | **Weave** | A completed rubric in a supported DOCX table, Markdown table, or JSON format | Producer preflight followed by a validated, rubric-only Brightspace import package and its review/receipt companions |
 
+After choosing Unravel, you can read one export or select **Bulk Unravel** and
+point the Loom to a parent folder. Bulk Unravel inventories the folder's
+immediate course-export ZIPs and unpacked export folders, reviews the batch
+once, and gives every course its own output folder and run log.
+
 Rubric Loom has no AI component. It is deterministic, rules-based Python
 software that reads and writes against known Brightspace/D2L package
 structures. Processing stays on your computer, and the Loom does not change
@@ -43,8 +48,10 @@ The terminal guide chooses sensible file and folder names after it reads your
 source. Before anything is written, one review card shows the source, exact
 filenames, save folder, and relevant review options. Press Return to use the
 recommendations, or enter the number of the one item you want to change.
-Weave also shows its producer preflight and requires the final named approval
-`WEAVE`.
+Bulk Unravel shows one inventory and destination review before running each
+export in sequence; one failed or rubric-free export does not conceal the
+remaining results. Weave also shows its producer preflight and requires the
+final named approval `WEAVE`.
 
 Environment checks are automatic and quiet when everything is ready. If a
 required Python package is missing, the Loom explains what it needs and
@@ -83,7 +90,9 @@ service with two doors that converge on the Brightspace rubric dialect
 
   Attribute values and authored wording are preserved verbatim; nothing is
   inferred. Add `--progress-events` to stream `coursecraft.progress/1`
-  NDJSON for wizard-style consumers.
+  NDJSON for wizard-style consumers. The guided TUI's Bulk Unravel option
+  coordinates this same command once per immediate ZIP or unpacked export
+  folder; it does not add a second extraction implementation.
 
 - **Weave**: the pinned Workbench producer accepts supported DOCX rubric
   tables, Markdown tables, `coursecraft.rubric_authoring/1` JSON, eligible
@@ -166,9 +175,10 @@ offers to build the `.venv`, then opens the Loom artwork and the explicit
 **Unravel** / **Weave** landing page. Each door offers its own synthetic
 demonstration from the source chooser.
 
-Unravel retains its export peek and review artifacts. Weave invokes producer
-preflight, shows only producer-reported labels and scoring evidence, requires
-a named final approval, and leads with the receipt-grounded import ZIP.
+Unravel retains its export peek and review artifacts, and offers single or
+bulk processing after the door is selected. Weave invokes producer preflight,
+shows only producer-reported labels and scoring evidence, requires a named
+final approval, and leads with the receipt-grounded import ZIP.
 Both doors share automatic environment checks, the terminal kit,
 progress-event consumer, cancellation behavior, plain mode, launcher, and
 door-isolated remembered state. The verbose doctor is an explicit diagnostic

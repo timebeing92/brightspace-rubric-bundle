@@ -13,6 +13,8 @@ required Python packages. A guided launch starts by choosing a door:
 - **Unravel** accepts a course export ZIP, unpacked export folder, or
   `rubrics_d2l.xml`. Its shallow export peek, DOCX/workbook/JSON options,
   progress board, partial-delivery behavior, and legacy CLI remain intact.
+  After choosing the door, the operator can select one export or Bulk
+  Unravel a parent folder of immediate ZIPs and unpacked export folders.
 - **Weave** accepts supported DOCX, Markdown, and JSON authoring sources. It
   invokes producer preflight before writing, displays only producer-reported
   rubric counts, level labels, scoring sources, weight sources, and
@@ -51,7 +53,8 @@ pattern as the Blueprint Wizard:
 
 1. Choose what you want to do: read an existing export with **Unravel**, or
    package a completed rubric with **Weave**.
-2. Select or drag the source file or folder into the terminal.
+2. For Unravel, choose one export or a folder of exports. Select or drag the
+   source file or folder into the terminal.
 3. Read the source check. Weave also shows its producer preflight, including
    the adapter, rubric structure, scoring source, weight source, and any
    diagnostics.
@@ -66,6 +69,30 @@ pattern as the Blueprint Wizard:
 At each review card, `q` leaves without running and `b` returns to the
 read-only source check. Error messages keep the user at the relevant screen
 and say which numbered item to change.
+
+### Bulk Unravel
+
+Bulk Unravel is a guided-TUI coordinator over the unchanged single-export
+producer. The selected folder is a batch container. Its immediate `.zip`
+files and immediate child folders carrying `imsmanifest.xml` or
+`rubrics_d2l.xml` are included; hidden entries, symlinks, ordinary files,
+and unrelated folders are listed as ignored. Discovery does not recurse
+through arbitrary nested containers.
+
+A selected root that directly carries an export marker is refused as a
+likely single unpacked export. Source names that collapse to the same safe
+output label are also refused before writing. The review card shows the
+inventory, shared output root, and DOCX choice once. Each source then runs
+sequentially into `<label>__rubric_bundle`, with its own producer events,
+artifacts, and log.
+
+The final summary separates completed exports, exports with no rubric
+evidence, failures, interruptions, and sources not attempted after an
+interrupt. A partial batch exits `1`, a batch containing only rubric-free
+exports exits `3`, and Ctrl-C exits `130`. Bulk mode currently belongs to
+the guided TUI; the existing headless single-export contract is unchanged.
+`--output-dir` can set the shared batch destination, while `--label` is
+refused because every export requires its own collision-checked label.
 
 ## Non-interactive use
 
