@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import pty
+import re
 import select
 import signal
 import struct
@@ -100,7 +101,11 @@ def test_wizard_matches_cli_artifacts_on_the_synthetic_fixture(
     stdout = result.stdout.decode()
     # The approved line keeps its glyph in every mode.
     assert "The cloth is bound ✦" in stdout
-    assert "2 rubric(s), 0 diagnostic(s)" in stdout
+    assert "Unravel finished successfully" in stdout
+    assert re.search(r"Rubrics pulled\s+2", stdout)
+    assert "Sample Rubric One" in stdout
+    assert "Second Rubric / Two" in stdout
+    assert re.search(r"Diagnostics\s+0", stdout)
     assert "start here" in stdout
     assert (wizard_dir / "unravel_wizard.log").is_file()
 
@@ -137,7 +142,8 @@ def test_zip_sources_match_folder_parity(tmp_path: Path) -> None:
         assert result.returncode == 0, result.stdout + result.stderr
         stdout = result.stdout.decode()
         assert "rubrics sighted  2" in stdout.replace("   ", "  ")
-        assert "2 rubric(s), 0 diagnostic(s)" in stdout
+        assert re.search(r"Rubrics pulled\s+2", stdout)
+        assert re.search(r"Diagnostics\s+0", stdout)
 
 
 def test_multi_member_zip_peek_matches_the_file_the_run_uses(
@@ -173,7 +179,8 @@ def test_multi_member_zip_peek_matches_the_file_the_run_uses(
     assert result.returncode == 0, result.stdout + result.stderr
     stdout = result.stdout.decode()
     assert "rubrics sighted  2" in stdout.replace("   ", "  ")
-    assert "2 rubric(s), 0 diagnostic(s)" in stdout
+    assert re.search(r"Rubrics pulled\s+2", stdout)
+    assert re.search(r"Diagnostics\s+0", stdout)
 
 
 def test_peek_sighted_count_matches_extraction(tmp_path: Path) -> None:
@@ -221,6 +228,158 @@ def test_yes_without_source_refuses_everywhere() -> None:
     result = run_wizard("--yes")
     assert result.returncode == 2
     assert b"--yes needs --source" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Source-prompt UX
+# ---------------------------------------------------------------------------
+def test_pick_source_accepts_a_dragged_path_without_an_intermediate_menu(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    source = tmp_path / "Course Export"
+    source.mkdir()
+    prompts: list[str] = []
+
+    monkeypatch.setattr(wizard, "input_lane_candidates", lambda: [])
+    monkeypatch.setattr(
+        loom_ui,
+        "choose",
+        lambda *args, **kwargs: pytest.fail(
+            "source entry should not open a routing menu"
+        ),
+    )
+
+    def answer(prompt: str) -> str:
+        prompts.append(prompt)
+        return f"'{source}'"
+
+    monkeypatch.setattr("builtins.input", answer)
+
+    assert wizard.pick_source(loom_ui.Term(plain=True), "") == source
+    output = capsys.readouterr().out
+    assert len(prompts) == 1
+    assert "Course export path" in prompts[0]
+    assert "Where is the course export you want to read?" not in output
+    assert "Enter or drag a different file or folder path" not in output
+
+
+def test_pick_source_keeps_demo_and_navigation_out_of_the_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    prompts: list[str] = []
+    replies = iter(("d", "e"))
+    monkeypatch.setattr(wizard, "input_lane_candidates", lambda: [])
+
+    def answer(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(replies)
+
+    monkeypatch.setattr("builtins.input", answer)
+
+    assert wizard.pick_source(loom_ui.Term(plain=True), "") is None
+    output = capsys.readouterr().out
+    assert len(prompts) == 2
+    assert all(prompt.strip().endswith("Course export path:") for prompt in prompts)
+    assert all("demonstration" not in prompt for prompt in prompts)
+    assert all("Return =" not in prompt for prompt in prompts)
+    assert "built-in demonstration" not in output
+    assert "b = back" in output
+    assert "e = exit" in output
+    assert "I could not find that file or folder: d" in output
+
+
+def test_pick_source_explains_a_real_last_used_path_above_the_plain_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    source = tmp_path / "last export"
+    source.mkdir()
+    prompts: list[str] = []
+    monkeypatch.setattr(wizard, "input_lane_candidates", lambda: [])
+
+    def answer(prompt: str) -> str:
+        prompts.append(prompt)
+        return ""
+
+    monkeypatch.setattr("builtins.input", answer)
+
+    assert wizard.pick_source(loom_ui.Term(plain=True), str(source)) == source
+    output = capsys.readouterr().out
+    compact = " ".join(output.split())
+    assert f"Last used: {source}" in compact
+    assert "Press Return to use it again." in compact
+    assert len(prompts) == 1
+    assert prompts[0].strip().endswith("Course export path:")
+    assert "[" not in prompts[0]
+
+
+def test_pick_source_back_returns_to_the_unravel_menu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    monkeypatch.setattr(wizard, "input_lane_candidates", lambda: [])
+    monkeypatch.setattr("builtins.input", lambda _prompt: "b")
+
+    assert (
+        wizard.pick_source(loom_ui.Term(plain=True), "")
+        is wizard.UNRAVEL_MENU
+    )
+
+
+def test_pick_source_reprompts_after_a_missing_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    source = tmp_path / "real export"
+    source.mkdir()
+    replies = iter((str(tmp_path / "missing.zip"), str(source)))
+    monkeypatch.setattr(wizard, "input_lane_candidates", lambda: [])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(replies))
+
+    assert wizard.pick_source(loom_ui.Term(plain=True), "") == source
+    assert "I could not find that file or folder" in capsys.readouterr().out
+
+
+def test_pick_source_keeps_input_lane_choices_in_the_same_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    first = tmp_path / "A.zip"
+    second = tmp_path / "B.zip"
+    first.touch()
+    second.touch()
+    monkeypatch.setattr(
+        wizard, "input_lane_candidates", lambda: [first, second]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: "2")
+
+    assert wizard.pick_source(loom_ui.Term(plain=True), "") == second
+    output = capsys.readouterr().out
+    assert "Ready in the input folder" in output
+    assert "Enter 1-2" in output
 
 
 def test_yes_ignores_remembered_answers(tmp_path: Path) -> None:
@@ -557,6 +716,86 @@ def test_failure_card_partial_delivery_and_no_docx_hint(tmp_path: Path) -> None:
     assert "\x1b" not in text
 
 
+def test_rubric_names_from_contract_fails_closed_on_damaged_delivery(
+    tmp_path: Path,
+) -> None:
+    import rubric_loom_wizard as wizard
+
+    contract = tmp_path / "rubrics.json"
+    contract.write_text("{not-json", encoding="utf-8")
+    assert wizard.rubric_names_from_contract(contract) == ()
+
+    contract.write_text('{"rubrics": "not-a-list"}', encoding="utf-8")
+    assert wizard.rubric_names_from_contract(contract) == ()
+
+    contract.write_text(
+        '{"rubrics": [{"name": " Named "}, {"name": ""}]}',
+        encoding="utf-8",
+    )
+    assert wizard.rubric_names_from_contract(contract) == (
+        "Named",
+        "(unnamed rubric)",
+    )
+
+
+def test_open_folder_offer_is_explicit_and_uses_the_output_folder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    opened: list[list[str]] = []
+    term = loom_ui.Term(plain=True)
+    term.plain = False
+    monkeypatch.setattr(
+        loom_ui,
+        "confirm",
+        lambda _term, prompt, *, default=False: (
+            prompt == "Open the folder containing these files?"
+            and default is True
+        ),
+    )
+    monkeypatch.setattr(
+        wizard,
+        "folder_open_command",
+        lambda path: ["folder-opener", str(path)],
+    )
+    monkeypatch.setattr(
+        wizard.subprocess,
+        "run",
+        lambda command, *, check=False: (
+            opened.append(command)
+            or wizard.subprocess.CompletedProcess(command, 0)
+        ),
+    )
+
+    wizard.offer_open_folder(term, tmp_path)
+
+    assert opened == [["folder-opener", str(tmp_path)]]
+
+
+def test_open_folder_offer_never_runs_in_plain_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    monkeypatch.setattr(
+        loom_ui,
+        "confirm",
+        lambda *args, **kwargs: pytest.fail("plain runs must never prompt"),
+    )
+    monkeypatch.setattr(
+        wizard.subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("plain runs must never open a GUI"),
+    )
+
+    wizard.offer_open_folder(loom_ui.Term(plain=True), tmp_path)
+
+
 def test_typed_path_accepts_dragged_and_quoted_forms(tmp_path: Path) -> None:
     """macOS drag-and-drop produces backslash-escaped paths; quoting is
     the other common paste form. Both must resolve."""
@@ -720,6 +959,11 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
     board_started = time.monotonic()
     session.send(b"\r")
     session.wait_for("The cloth is bound ✦".encode("utf-8"), timeout=30.0)
+    session.wait_for(b"Rubrics pulled")
+    session.wait_for(b"Sample Rubric One")
+    session.wait_for(b"Second Rubric / Two")
+    session.wait_for(b"Open the folder containing these files?")
+    session.send(b"n\r")
     paced_elapsed = time.monotonic() - board_started
     code = session.finish()
     assert code == 0

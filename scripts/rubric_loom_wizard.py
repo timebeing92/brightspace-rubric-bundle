@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -133,6 +134,13 @@ class BulkOutcome:
     return_code: int
 
 
+class _UnravelMenu:
+    """Navigation sentinel: return to the early Unravel choice screen."""
+
+
+UNRAVEL_MENU = _UnravelMenu()
+
+
 def trail(term: loom_ui.Term, current: str) -> str:
     """A one-line journey marker under each phase heading. The brackets
     carry the position, so plain mode loses nothing."""
@@ -148,6 +156,10 @@ def trail(term: loom_ui.Term, current: str) -> str:
 def guidance(term: loom_ui.Term, text: str) -> None:
     """One quiet what-do-I-do-here line. Informative copy stays plain."""
     print(loom_ui.paragraph(term, text, dim=True))
+
+
+def navigation_footer(term: loom_ui.Term) -> None:
+    print("  " + term.secondary("b = back  ·  e = exit"))
 
 
 # ---------------------------------------------------------------------------
@@ -835,14 +847,21 @@ def choose_unravel_mode(term: loom_ui.Term, *, allow_back: bool):
     print()
     return loom_ui.choose(
         term,
-        "How many course exports do you want to unravel?",
+        "How would you like to begin?",
         [
-            ("single", "ONE EXPORT — read one ZIP, unpacked export, or rubric XML"),
+            (
+                "single",
+                "ONE COURSE EXPORT — read one ZIP, unpacked export, or rubric XML",
+            ),
             (
                 "bulk",
-                "A FOLDER OF EXPORTS — read its immediate ZIPs and export folders",
+                "A FOLDER OF COURSE EXPORTS — read its immediate ZIPs and export folders",
             ),
-            ("q", "Leave without running"),
+            (
+                "demo",
+                "THE DEMONSTRATION — try Unravel with a built-in sample export",
+            ),
+            ("e", "Exit without running"),
         ],
         default="single",
         allow_back=allow_back,
@@ -868,99 +887,121 @@ def input_lane_candidates() -> list[Path]:
     return found[:9]
 
 
-def pick_source(term: loom_ui.Term, remembered: str) -> Path | None:
+def pick_source(
+    term: loom_ui.Term, remembered: str
+) -> Path | None | _UnravelMenu:
     print(loom_ui.paragraph(term, ACCEPTS_LINE))
     print()
-    while True:
-        candidates = input_lane_candidates()
-        remembered_path = Path(remembered) if remembered else None
-        options: list[tuple[str, str]] = []
-        default = "path"
+    candidates = input_lane_candidates()
+    remembered_path = Path(remembered) if remembered else None
+    if remembered_path == FIXTURE or (
+        remembered_path is not None and not remembered_path.exists()
+    ):
+        remembered_path = None
+
+    if candidates:
+        print(loom_ui.paragraph(term, "Ready in the input folder:", dim=True))
         for index, path in enumerate(candidates, start=1):
-            options.append(
-                (
-                    str(index),
-                    f"Use {relative_display(path)}  ({source_kind(path)})",
-                )
+            print(
+                f"      {term.bold(str(index))}. "
+                f"{relative_display(path)}  ({source_kind(path)})"
             )
-            if remembered_path is not None and path == remembered_path:
-                default = str(index)
-        options.append(("path", "Enter or drag a different file or folder path"))
-        options.append(
-            (
-                "demo",
-                f"Try the built-in demonstration  ({relative_display(FIXTURE)})",
-            )
-        )
-        options.append(("q", "Leave without running"))
-        if default == "path" and remembered_path == FIXTURE:
-            default = "demo"
-        choice = loom_ui.choose(
+        print()
+
+    if remembered_path is not None:
+        guidance(
             term,
-            "Where is the course export you want to read?",
-            options,
-            default=default,
-            allow_back=True,
+            f"Last used: {relative_display(remembered_path)}. "
+            "Press Return to use it again.",
         )
-        if choice is loom_ui.BACK or choice == "q":
-            return None
-        if choice == "demo":
-            return FIXTURE
-        if choice == "path":
-            while True:
-                print()
-                guidance(
-                    term,
-                    "Tip: drag the ZIP or folder into this window to paste its path.",
+        print()
+
+    candidate_note = (
+        f" Enter 1-{len(candidates)} to use a file already in the input folder."
+        if candidates
+        else ""
+    )
+    guidance(
+        term,
+        f"Drag or type a path now.{candidate_note}",
+    )
+    print()
+    navigation_footer(term)
+    print()
+    while True:
+        raw = loom_ui.prompt_text(
+            term,
+            "Course export path",
+        )
+
+        if not raw:
+            if remembered_path is not None:
+                return remembered_path
+            print(
+                term.secondary(
+                    "    drag or type a path, or use b to go back"
                 )
-                print()
-                raw = loom_ui.prompt_text(
-                    term,
-                    "Course export path",
-                    default=remembered,
-                    allow_back=True,
-                )
-                if raw is loom_ui.BACK:
-                    break
-                candidate = parse_typed_path(str(raw))
-                if candidate is None:
-                    print("  no source was selected.")
-                    return None
-                if candidate.exists():
-                    return candidate
-                print(
-                    loom_ui.status_line(
-                        term,
-                        "bad",
-                        f"I could not find that file or folder: {raw}",
-                    )
-                )
+            )
             continue
-        return candidates[int(choice) - 1]
+        if raw.lower() in {"b", "back"}:
+            return UNRAVEL_MENU
+        if raw.lower() in {"e", "exit", "q", "quit"}:
+            return None
+        if raw.isdigit() and 1 <= int(raw) <= len(candidates):
+            return candidates[int(raw) - 1]
+
+        candidate = parse_typed_path(raw)
+        if candidate is not None and candidate.exists():
+            return candidate
+        print(
+            loom_ui.status_line(
+                term,
+                "bad",
+                f"I could not find that file or folder: {raw}",
+            )
+        )
 
 
-def pick_bulk_folder(term: loom_ui.Term, remembered: str) -> Path | None:
+def pick_bulk_folder(
+    term: loom_ui.Term, remembered: str
+) -> Path | None | _UnravelMenu:
     """Prompt for a batch container; discovery validates its contents later."""
 
+    remembered_path = Path(remembered) if remembered else None
+    if remembered_path is not None and not remembered_path.is_dir():
+        remembered_path = None
     guidance(
         term,
         "Choose a parent folder containing course-export ZIPs, unpacked "
         "export folders, or a mixture of both.",
     )
     print()
+    if remembered_path is not None:
+        guidance(
+            term,
+            f"Last used: {relative_display(remembered_path)}. "
+            "Press Return to use it again.",
+        )
+        print()
+    navigation_footer(term)
+    print()
     while True:
         raw = loom_ui.prompt_text(
             term,
             "Folder containing the course exports",
-            default=remembered,
-            allow_back=True,
         )
-        if raw is loom_ui.BACK:
+        if not raw and remembered_path is not None:
+            return remembered_path
+        if not raw:
+            print(term.secondary("    drag or type a folder path, or use b to go back"))
+            continue
+        if str(raw).lower() in {"b", "back"}:
+            return UNRAVEL_MENU
+        if str(raw).lower() in {"e", "exit", "q", "quit"}:
             return None
         candidate = parse_typed_path(str(raw))
         if candidate is None:
-            print("  no batch folder was selected.")
-            return None
+            continue
         discovery = discover_bulk_sources(candidate)
         if discovery.problem:
             print(loom_ui.status_line(term, "bad", discovery.problem))
@@ -1241,6 +1282,73 @@ def delivered_this_run(
     return delivered
 
 
+def rubric_names_from_contract(path: Path) -> tuple[str, ...]:
+    """Read display names from this run's normalized contract.
+
+    The producer has already interpreted and validated the D2L source. The
+    TUI reads only its delivered JSON contract and never re-parses rubric XML.
+    A damaged or unexpectedly shaped file degrades to an honest missing-name
+    note on the results card instead of turning a successful run into a crash.
+    """
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ()
+    rubrics = document.get("rubrics") if isinstance(document, dict) else None
+    if not isinstance(rubrics, list):
+        return ()
+    names: list[str] = []
+    for rubric in rubrics:
+        if not isinstance(rubric, dict):
+            return ()
+        name = rubric.get("name")
+        names.append(
+            name.strip()
+            if isinstance(name, str) and name.strip()
+            else "(unnamed rubric)"
+        )
+    return tuple(names)
+
+
+def folder_open_command(path: Path) -> list[str] | None:
+    if sys.platform == "darwin":
+        return ["open", str(path)]
+    if os.name == "nt":
+        return ["explorer", str(path)]
+    opener = shutil.which("xdg-open")
+    return [opener, str(path)] if opener else None
+
+
+def offer_open_folder(term: loom_ui.Term, path: Path) -> None:
+    """Offer one explicit, post-success handoff in a live terminal."""
+
+    if term.plain or not path.is_dir():
+        return
+    command = folder_open_command(path)
+    if command is None:
+        return
+    if not loom_ui.confirm(
+        term,
+        "Open the folder containing these files?",
+        default=True,
+    ):
+        return
+    try:
+        result = subprocess.run(command, check=False)
+    except OSError:
+        result = None
+    if result is None or result.returncode != 0:
+        print(
+            loom_ui.status_line(
+                term,
+                "warn",
+                "The folder could not be opened automatically",
+                relative_display(path),
+            )
+        )
+
+
 def run_unravel(
     term: loom_ui.Term,
     source: Path,
@@ -1249,6 +1357,7 @@ def run_unravel(
     use_docx: bool,
     *,
     min_step_seconds: float,
+    offer_open: bool = False,
 ) -> int:
     command = [
         sys.executable,
@@ -1294,6 +1403,8 @@ def run_unravel(
 
     if return_code == 0 and run_end is not None and run_end.get("status") == "ok":
         results_card(term, run_end, out_dir, label, use_docx, log_path)
+        if offer_open:
+            offer_open_folder(term, out_dir)
         return 0
 
     failure_card(
@@ -1439,7 +1550,10 @@ def run_bulk_unravel(
             bulk_summary_rows(frozen_outcomes, output_root, len(sources)),
         )
     )
-    return bulk_return_code(frozen_outcomes)
+    return_code = bulk_return_code(frozen_outcomes)
+    if return_code == 0:
+        offer_open_folder(term, output_root)
+    return return_code
 
 
 def results_card(
@@ -1455,13 +1569,38 @@ def results_card(
     diagnostics = int(summary.get("diagnostics") or 0)
     outputs = run_end.get("outputs") or {}
     paths = artifact_paths(out_dir, label, use_docx)
+    rubric_names = rubric_names_from_contract(paths["contract JSON"])
     # A run_end of ok implies at least one rubric: the pinned extractor
     # refuses zero-rubric sources outright (its own "No <rubric> elements
     # found" failure), so no empty-success state exists to narrate.
 
     print()
-    counts = f"{rubrics} rubric(s), {diagnostics} diagnostic(s)"
-    rows: list[tuple[str, str]] = [("Read from export", counts)]
+    rows: list[tuple[str, str]] = [
+        (
+            "",
+            loom_ui.status_line(
+                term,
+                "ok",
+                "Unravel finished successfully — your review files are ready.",
+            ).strip(),
+        ),
+        ("", ""),
+        ("Rubrics pulled", str(rubrics)),
+    ]
+    for index, name in enumerate(rubric_names, start=1):
+        rows.append((f"  {index}.", term.bold(name)))
+    if len(rubric_names) != rubrics:
+        rows.append(
+            (
+                "",
+                term.warn(
+                    "The rubric names could not be read from the delivered "
+                    "JSON contract."
+                ),
+            )
+        )
+    rows.append(("Diagnostics", str(diagnostics)))
+    rows.append(("", ""))
     if use_docx and outputs.get("rubrics_docx"):
         rows.append(
             (
@@ -1486,7 +1625,7 @@ def results_card(
     else:
         next_action = "Next: open the workbook to review and revise the rubrics."
     rows += wrap_rows(next_action)
-    print(loom_ui.card(term, VOICE_BOUND, rows))
+    print(loom_ui.card(term, term.good(VOICE_BOUND), rows))
 
 
 def failure_card(
@@ -1633,7 +1772,13 @@ def _start_unravel(
     guidance(term, "The board is live - real steps, real timings. Ctrl-C stops cleanly.")
     min_step = 0.0 if (args.brisk or term.plain) else MIN_STEP_SECONDS
     return run_unravel(
-        term, source, out_dir, label, use_docx, min_step_seconds=min_step
+        term,
+        source,
+        out_dir,
+        label,
+        use_docx,
+        min_step_seconds=min_step,
+        offer_open=not args.yes and not term.plain,
     )
 
 
@@ -1707,7 +1852,9 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
     return _start_unravel(term, args, source, out_dir, label, use_docx)
 
 
-def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
+def _run_interactive(
+    term: loom_ui.Term, args, docx_ok: bool
+) -> int | _UnravelMenu:
     """A source check followed by one editable review card.
 
     Recommended names are chosen automatically. The operator sees the exact
@@ -1744,6 +1891,8 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
             else:
                 remembered = str(source) if source else str(state.get("source", ""))
                 picked = pick_source(term, remembered)
+                if picked is UNRAVEL_MENU:
+                    return UNRAVEL_MENU
                 if picked is None:
                     print("  nothing was run.")
                     return 0
@@ -1876,7 +2025,9 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
             return _start_unravel(term, args, source, out_dir, label, use_docx)
 
 
-def _run_bulk_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
+def _run_bulk_interactive(
+    term: loom_ui.Term, args, docx_ok: bool
+) -> int | _UnravelMenu:
     """Review one batch inventory, then drive the single-export producer."""
 
     if args.label is not None:
@@ -1924,6 +2075,8 @@ def _run_bulk_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
                 else str(state.get("bulk_source", ""))
             )
             picked = pick_bulk_folder(term, remembered)
+            if picked is UNRAVEL_MENU:
+                return UNRAVEL_MENU
             if picked is None:
                 print("  nothing was run.")
                 return 0
@@ -2206,7 +2359,7 @@ def main(argv: list[str] | None = None) -> int:
                     selected_mode = choose_unravel_mode(term, allow_back=True)
                     if selected_mode is loom_ui.BACK:
                         continue
-                    if selected_mode == "q":
+                    if selected_mode in {"e", "q"}:
                         door = "q"
                     else:
                         unravel_mode = str(selected_mode)
@@ -2220,7 +2373,7 @@ def main(argv: list[str] | None = None) -> int:
             and args.source is None
         ):
             selected_mode = choose_unravel_mode(term, allow_back=False)
-            if selected_mode == "q":
+            if selected_mode in {"e", "q"}:
                 door = "q"
             else:
                 unravel_mode = str(selected_mode)
@@ -2246,17 +2399,53 @@ def main(argv: list[str] | None = None) -> int:
         if template_action:
             return weave.run_template_headless(term, args)
 
-        if door == "weave":
-            saver = lambda values: save_door_state("weave", values)
-            state = door_state(load_state(), "weave")
-            if args.yes:
-                return weave.run_headless(term, args, saver)
-            return weave.run_interactive(term, args, state, saver)
         if args.yes:
+            if door == "weave":
+                saver = lambda values: save_door_state("weave", values)
+                return weave.run_headless(term, args, saver)
             return _run_headless(term, args, docx_ok)
-        if unravel_mode == "bulk":
-            return _run_bulk_interactive(term, args, docx_ok)
-        return _run_interactive(term, args, docx_ok)
+
+        while True:
+            if door == "weave":
+                saver = lambda values: save_door_state("weave", values)
+                state = door_state(load_state(), "weave")
+                return weave.run_interactive(term, args, state, saver)
+
+            if unravel_mode == "bulk":
+                result = _run_bulk_interactive(term, args, docx_ok)
+            elif unravel_mode == "demo":
+                original_source = args.source
+                args.source = FIXTURE
+                try:
+                    result = _run_interactive(term, args, docx_ok)
+                finally:
+                    args.source = original_source
+            else:
+                result = _run_interactive(term, args, docx_ok)
+
+            if result is not UNRAVEL_MENU:
+                return result
+
+            while True:
+                selected_mode = choose_unravel_mode(
+                    term,
+                    allow_back=args.door is None,
+                )
+                if selected_mode is not loom_ui.BACK:
+                    break
+                door = choose_door(term, load_state())
+                if door == "q":
+                    print("  nothing was run.")
+                    return 0
+                if door == "weave":
+                    break
+            if door == "weave":
+                continue
+            if selected_mode in {"e", "q"}:
+                print("  nothing was run.")
+                return 0
+            door = "unravel"
+            unravel_mode = str(selected_mode)
     except KeyboardInterrupt:
         print("\n  interrupted — nothing else was run.", file=sys.stderr)
         return 130

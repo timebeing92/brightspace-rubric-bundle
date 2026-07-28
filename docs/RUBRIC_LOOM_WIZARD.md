@@ -183,9 +183,12 @@ and remains protected from a containing `--force` output target.
 
 - Return accepts recommended names and locations. Numbered review-card actions
   open only the selected setting.
-- `b`/`back` leaves an edit unchanged or returns a review card to the
+- `b`/`back` leaves an edit unchanged, returns an Unravel path prompt to the
+  early Single/Bulk/Demonstration choice, or returns a review card to the
   source/preflight. Back from the second fallback returns to the first scoring
   decision, while Back from the first returns to source/preflight.
+- `e`/`exit` leaves an Unravel path prompt or its early choice screen without
+  running.
 - `q` leaves the landing or door router without running.
 - Ctrl-C returns `130`; a running child receives SIGINT and no incomplete
   Weave artifact is presented as deliverable.
@@ -199,8 +202,9 @@ and remains protected from a containing `--force` output target.
   launching the producer.
 
 The launcher performs the existing first-run `.venv` bootstrap and then opens
-the art-led two-door TUI directly. Unravel and Weave demonstrations remain
-inside their respective source choosers.
+the art-led two-door TUI directly. Unravel offers its demonstration beside
+the early Single/Bulk choice; Weave keeps its demonstration in its source
+chooser.
 
 ## Ownership boundary
 

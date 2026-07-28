@@ -172,8 +172,9 @@ names survive the loop. The receipt lands in
 
 Or double-click `launch_rubric_loom.command` (macOS). On a fresh machine it
 offers to build the `.venv`, then opens the Loom artwork and the explicit
-**Unravel** / **Weave** landing page. Each door offers its own synthetic
-demonstration from the source chooser.
+**Unravel** / **Weave** landing page. Unravel places its synthetic
+demonstration beside the early Single/Bulk choice; Weave keeps its
+demonstration in its source chooser.
 
 Unravel retains its export peek and review artifacts, and offers single or
 bulk processing after the door is selected. Weave invokes producer preflight,
