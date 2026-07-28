@@ -48,7 +48,7 @@ ALLOWED_SUFFIXES = {".docx", ".json", ".md", ".markdown"}
 PREFLIGHT_SCHEMA = "coursecraft.rubric_authoring_preflight/1"
 TEMPLATE_NAMES = tuple(templates.EXPECTED_MEDIA_TYPES)
 
-PHASES = ("workshop", "source", "preflight", "commission", "weaving")
+PHASES = ("workshop", "source", "preflight", "review", "weaving")
 VOICE_BOUND = "The cloth is bound ✦"
 VOICE_SNAPPED = "A thread snapped — the scroll below tells why."
 FLAVOR = {
@@ -366,7 +366,13 @@ def preflight_card(term: loom_ui.Term, preflight: dict) -> None:
                 f"{item.get('code', 'UNNAMED')}: {item.get('message', '')}",
             )
         )
-    print(loom_ui.card(term, "Producer preflight", rows))
+    rows.extend(
+        [
+            ("", ""),
+            ("", "Read-only check: no package has been written."),
+        ]
+    )
+    print(loom_ui.card(term, "What Weave found · Producer preflight", rows))
 
 
 def refusal_card(term: loom_ui.Term, preflight: dict) -> None:
@@ -657,14 +663,24 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
             options.append((str(index), relative_display(path)))
             if remembered_path == path:
                 default = str(index)
-        options.append(("path", "type or drag a DOCX, Markdown, or JSON path"))
-        options.append(("demo", f"the explicit-scoring demonstration ({relative_display(FIXTURE)})"))
-        options.append(("q", "leave without running"))
+        options.append(
+            (
+                "path",
+                "Enter or drag a completed Word, Markdown, or JSON rubric",
+            )
+        )
+        options.append(
+            (
+                "demo",
+                f"Try the built-in demonstration  ({relative_display(FIXTURE)})",
+            )
+        )
+        options.append(("q", "Leave without running"))
         if remembered_path == FIXTURE:
             default = "demo"
         choice = loom_ui.choose(
             term,
-            "Which authored rubric should the loom weave?",
+            "Where is the completed rubric you want to package?",
             options,
             default=default,
             allow_back=True,
@@ -678,10 +694,14 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
         if choice == "demo":
             return FIXTURE
         if choice == "path":
-            for _ in range(3):
+            while True:
+                guidance(
+                    term,
+                    "Tip: drag the file into this window to paste its full path.",
+                )
                 raw = loom_ui.prompt_text(
                     term,
-                    "Path to the authored rubric",
+                    "Completed rubric path",
                     default=remembered,
                     allow_back=True,
                 )
@@ -692,10 +712,11 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
                     return None
                 if candidate.is_file():
                     return candidate
-                print(loom_ui.status_line(term, "bad", f"not found: {raw}"))
-            else:
-                return None
-            continue
+                print(
+                    loom_ui.status_line(
+                        term, "bad", f"I could not find that file: {raw}"
+                    )
+                )
         return candidates[int(choice) - 1]
 
 
@@ -711,9 +732,21 @@ def ensure_fallback_decisions(
     initial_equal = bool(args.allow_equal_weights)
     decisions: list[tuple[str, str]] = []
     if "SCORING_METADATA_REQUIRED" in codes and not initial_even:
-        decisions.append(("allow_even_spacing", "Approve even level spacing for this run?"))
+        decisions.append(
+            (
+                "allow_even_spacing",
+                "The source does not provide complete level scores. Use evenly "
+                "spaced scores across its levels for this run?",
+            )
+        )
     if "CRITERION_WEIGHT_REQUIRED" in codes and not initial_equal:
-        decisions.append(("allow_equal_weights", "Approve equal criterion weights for this run?"))
+        decisions.append(
+            (
+                "allow_equal_weights",
+                "The source does not provide complete criterion weights. Give "
+                "each criterion equal weight for this run?",
+            )
+        )
     index = 0
     while index < len(decisions):
         attribute, prompt = decisions[index]
@@ -857,22 +890,33 @@ def results_card(term: loom_ui.Term, run_end: dict, log_path: Path) -> bool:
     summary = run_end.get("summary") if isinstance(run_end.get("summary"), dict) else {}
     rows: list[tuple[str, str]] = [
         (
-            "woven",
+            "Built",
             f"{int(summary.get('rubrics') or 0)} rubric(s), "
             f"{int(summary.get('diagnostics') or 0)} diagnostic(s)",
         ),
-        ("start here", f"{relative_display(outputs['import_zip'])}  — Brightspace import ZIP"),
-        ("normalized JSON", relative_display(outputs["normalized_authoring_json"])),
-        ("mapping report", relative_display(outputs["mapping_report"])),
+        (
+            "start here",
+            f"{relative_display(outputs['import_zip'])}  — Brightspace import ZIP",
+        ),
+        (
+            "Normalized rubric",
+            relative_display(outputs["normalized_authoring_json"]),
+        ),
+        ("Mapping review", relative_display(outputs["mapping_report"])),
     ]
     if "review_report" in outputs:
-        rows.append(("review report", relative_display(outputs["review_report"])))
+        rows.append(("DOCX review", relative_display(outputs["review_report"])))
     rows.extend(
         [
-            ("diagnostics", relative_display(outputs["diagnostics_json"])),
-            ("receipt", relative_display(outputs["run_identity"])),
-            ("log", relative_display(log_path)),
+            ("Diagnostics", relative_display(outputs["diagnostics_json"])),
+            ("Run receipt", relative_display(outputs["run_identity"])),
+            ("Run log", relative_display(log_path)),
             ("", ""),
+            (
+                "",
+                "Next: review the mapping and diagnostics, then import the ZIP "
+                "yourself in Brightspace.",
+            ),
             ("", "Nothing was imported. Activity attachment remains manual."),
         ]
     )
@@ -998,13 +1042,25 @@ def run_build_from_approved_snapshot(
 
 def _commission_rows(args, source: Path, label: str, out_dir: Path) -> list[tuple[str, str]]:
     return [
-        ("source", relative_display(source)),
-        ("label", label),
-        ("bundle", relative_display(out_dir)),
-        ("even spacing", "approved" if args.allow_even_spacing else "not used"),
-        ("equal weights", "approved" if args.allow_equal_weights else "not used"),
-        ("Brightspace import", "not performed"),
-        ("activity attachment", "manual only"),
+        ("1. Source", relative_display(source)),
+        ("2. Output name", label),
+        ("3. Save folder", relative_display(out_dir)),
+        ("   Import ZIP", "rubric_package.zip"),
+        (
+            "Scoring",
+            "even spacing approved"
+            if args.allow_even_spacing
+            else "source scoring preserved",
+        ),
+        (
+            "Weights",
+            "equal weights approved"
+            if args.allow_equal_weights
+            else "source weights preserved",
+        ),
+        ("", ""),
+        ("", "Nothing is written until the final WEAVE approval."),
+        ("", "Import and activity attachment remain manual in Brightspace."),
     ]
 
 
@@ -1014,11 +1070,11 @@ def output_destination_problem(out_dir: Path) -> str | None:
     except FileNotFoundError:
         return None
     except OSError:
-        return "bundle destination is unreadable"
+        return "the save folder could not be inspected"
     if stat.S_ISLNK(mode):
-        return "bundle destination must not be a symlink"
+        return "choose a save folder that is not a symbolic link"
     if not stat.S_ISDIR(mode):
-        return "bundle destination must be a directory, not an existing file"
+        return "the save location is an existing file, not a folder"
     return None
 
 
@@ -1029,12 +1085,12 @@ def source_output_separation_problem(source: Path, out_dir: Path) -> str | None:
         resolved_source = source.expanduser().resolve()
         resolved_output = out_dir.expanduser().resolve(strict=False)
     except OSError:
-        return "source or bundle destination could not be resolved safely"
+        return "the source or save folder could not be resolved safely"
     if (
         resolved_source == resolved_output
         or resolved_source.is_relative_to(resolved_output)
     ):
-        return "bundle destination must not contain the original source"
+        return "the save folder must not contain the original source"
     return None
 
 
@@ -1059,7 +1115,7 @@ def run_headless(
         print(loom_ui.status_line(term, "bad", "Weave accepts DOCX, Markdown, or JSON files"))
         return 2
 
-    print(loom_ui.heading(term, "Producer preflight", "3 of 5"))
+    print(loom_ui.heading(term, "Check the rubric · producer preflight", "3 of 5"))
     print(trail(term, "preflight"))
     _, preflight = invoke_preflight(args)
     preflight_card(term, preflight)
@@ -1089,8 +1145,8 @@ def run_headless(
     if destination_problem:
         print(loom_ui.status_line(term, "bad", destination_problem))
         return 2
-    print(loom_ui.heading(term, "The commission", "4 of 5"))
-    print(trail(term, "commission"))
+    print(loom_ui.heading(term, "Review and build", "4 of 5"))
+    print(trail(term, "review"))
     print(loom_ui.card(term, "Ready to weave", _commission_rows(args, source, label, out_dir)))
     print("  ? Named final approval: WEAVE (--approve-weave)")
     save_state(
@@ -1126,10 +1182,19 @@ def run_interactive(
         args.source.expanduser().absolute() if args.source is not None else None
     )
     source = provided_source
+    label: str | None = sanitize_label(args.label) if args.label else None
+    out_dir: Path | None = (
+        args.output_dir.expanduser().absolute()
+        if args.output_dir is not None
+        else None
+    )
+    automatic_label = args.label is None
+    automatic_folder = args.output_dir is None
     explicit_even_spacing = bool(args.allow_even_spacing)
     explicit_equal_weights = bool(args.allow_equal_weights)
     if args.context_dir is not None:
         args.context_dir = args.context_dir.expanduser().absolute()
+
     while True:
         args.allow_even_spacing = explicit_even_spacing
         args.allow_equal_weights = explicit_equal_weights
@@ -1137,12 +1202,16 @@ def run_interactive(
         print(trail(term, "source"))
         guidance(
             term,
-            "Choose a DOCX, Markdown, or JSON authoring source; nothing is written yet.",
+            "Choose a completed Word, Markdown, or JSON rubric. This step is "
+            "read-only.",
         )
         if source is None:
             picked = pick_source(term, str(state.get("source", "")))
             if picked is TEMPLATE_HANDOFF:
-                print("  no package was built; return after editing the copied template.")
+                print(
+                    "  no package was built. Complete the copied template, "
+                    "then return and select it."
+                )
                 return 0
             source = picked
         else:
@@ -1165,12 +1234,21 @@ def run_interactive(
             return 2
         source = source.absolute()
         args.source = source
+        if label is None or automatic_label:
+            label = default_label(source)
+        if out_dir is None or automatic_folder:
+            out_dir = default_bundle_dir(label).expanduser().absolute()
 
-        print(loom_ui.heading(term, "Producer preflight", "3 of 5"))
+        print(
+            loom_ui.heading(
+                term, "Check the rubric · producer preflight", "3 of 5"
+            )
+        )
         print(trail(term, "preflight"))
         guidance(
             term,
-            "Only producer-reported rubric structure and scoring evidence are shown.",
+            "Weave checks the rubric structure, scoring evidence, and weights "
+            "before it offers to build anything.",
         )
         _, preflight = invoke_preflight(args)
         preflight_card(term, preflight)
@@ -1188,7 +1266,7 @@ def run_interactive(
             print()
             print(
                 loom_ui.card(
-                    term, "Producer preflight after explicit approvals", []
+                    term, "Preflight after your explicit scoring decisions", []
                 )
             )
             preflight_card(term, preflight)
@@ -1199,87 +1277,111 @@ def run_interactive(
             print(loom_ui.status_line(term, "bad", str(exc)))
             return 2
 
-        print(loom_ui.heading(term, "The commission", "4 of 5"))
-        print(trail(term, "commission"))
-        label = sanitize_label(args.label) if args.label else default_label(source)
-        out_dir: Path | None = None
-        step = "label"
+        print(loom_ui.heading(term, "Review and build", "4 of 5"))
+        print(trail(term, "review"))
+        restart_preflight = False
         while True:
-            if step == "label":
+            assert label is not None
+            assert out_dir is not None
+            guidance(
+                term,
+                "Recommended names are ready. Press Return to continue to the "
+                "final approval, or change one numbered item.",
+            )
+            print(
+                loom_ui.card(
+                    term,
+                    "Ready to weave",
+                    _commission_rows(args, source, label, out_dir),
+                )
+            )
+            reply = loom_ui.review_choice(
+                term,
+                "Continue to final approval?",
+                choices=("1", "2", "3"),
+                allow_back=True,
+            )
+            if reply == "q":
+                print("  nothing was run.")
+                return 0
+            if reply is loom_ui.BACK or reply == "1":
+                if provided_source is None:
+                    source = None
+                restart_preflight = True
+                break
+            if reply == "2":
                 label_reply = loom_ui.prompt_text(
                     term,
-                    "Label for the artifacts",
+                    "Output name (used in the run record and default folder)",
                     default=label,
                     allow_back=True,
                 )
                 if label_reply is loom_ui.BACK:
-                    print()
-                    preflight_card(term, preflight)
-                    guidance(
-                        term,
-                        "The producer preflight is unchanged; continue or Ctrl-C to leave.",
-                    )
                     continue
                 label = sanitize_label(str(label_reply))
-                step = "folder"
-            elif step == "folder":
-                default_dir = out_dir or args.output_dir or default_bundle_dir(label)
+                automatic_label = False
+                if automatic_folder:
+                    out_dir = default_bundle_dir(label).expanduser().absolute()
+                continue
+            if reply == "3":
                 folder_reply = loom_ui.prompt_text(
                     term,
-                    "Bundle folder",
-                    default=str(default_dir),
+                    "Save folder",
+                    default=str(out_dir),
                     allow_back=True,
                 )
                 if folder_reply is loom_ui.BACK:
-                    step = "label"
                     continue
-                out_dir = (
-                    parse_typed_path(str(folder_reply)) or default_dir
-                ).expanduser().absolute()
-                destination_problem = output_destination_problem(out_dir)
-                destination_problem = (
-                    destination_problem
-                    or source_output_separation_problem(source, out_dir)
-                )
-                if destination_problem:
-                    print(loom_ui.status_line(term, "bad", destination_problem))
-                    continue
-                if out_dir.exists() and any(out_dir.iterdir()):
-                    overwrite = loom_ui.confirm(
-                        term,
-                        "Matching artifacts may be overwritten. Continue with this folder?",
-                        default=False,
-                        allow_back=True,
-                    )
-                    if overwrite is loom_ui.BACK or not overwrite:
-                        continue
-                step = "approval"
-            else:
-                assert out_dir is not None
-                print(
-                    loom_ui.card(
-                        term,
-                        "Ready to weave",
-                        _commission_rows(args, source, label, out_dir),
-                    )
-                )
-                guidance(
+                parsed = parse_typed_path(str(folder_reply))
+                if parsed is not None:
+                    out_dir = parsed.expanduser().absolute()
+                    automatic_folder = False
+                continue
+
+            destination_problem = output_destination_problem(out_dir)
+            destination_problem = (
+                destination_problem
+                or source_output_separation_problem(source, out_dir)
+            )
+            if destination_problem:
+                print(loom_ui.status_line(term, "bad", destination_problem))
+                guidance(term, "Enter 3 on the review card to choose another folder.")
+                continue
+            if out_dir.exists() and any(out_dir.iterdir()):
+                overwrite = loom_ui.confirm(
                     term,
-                    "Type the named approval exactly; b returns to the bundle folder.",
-                )
-                approval = loom_ui.prompt_text(
-                    term,
-                    "Type WEAVE to approve writing this rubric-only package",
+                    "This folder already contains files. Replace matching Loom files?",
+                    default=False,
                     allow_back=True,
                 )
-                if approval is loom_ui.BACK:
-                    step = "folder"
+                if overwrite is loom_ui.BACK or not overwrite:
+                    guidance(
+                        term,
+                        "Enter 3 on the review card to choose another folder.",
+                    )
                     continue
-                if str(approval).strip() != "WEAVE":
-                    print("  named approval was not given; nothing was run.")
-                    return 0
-                break
 
+            guidance(
+                term,
+                "This approval writes the package shown above. Type it exactly; "
+                "b returns to the review card.",
+            )
+            approval = loom_ui.prompt_text(
+                term,
+                "Type WEAVE to build this rubric-only package",
+                allow_back=True,
+            )
+            if approval is loom_ui.BACK:
+                continue
+            if str(approval).strip() != "WEAVE":
+                print("  WEAVE was not entered; nothing was written.")
+                return 0
+            break
+
+        if restart_preflight:
+            continue
+
+        assert label is not None
         assert out_dir is not None
         save_state(
             {

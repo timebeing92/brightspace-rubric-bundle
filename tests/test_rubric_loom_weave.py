@@ -487,7 +487,7 @@ def test_headless_regular_file_bundle_target_is_refused_without_change(
     target.write_text("sentinel", encoding="utf-8")
     result = run_wizard(*weave_args(EXPLICIT, target))
     assert result.returncode == 2
-    assert b"must be a directory, not an existing file" in result.stdout
+    assert b"save location is an existing file, not a folder" in result.stdout
     assert target.read_text(encoding="utf-8") == "sentinel"
 
 
@@ -645,22 +645,25 @@ def test_interactive_weave_named_approval_and_back_behavior(tmp_path: Path) -> N
         ],
         state=tmp_path / "declined-state.json",
     )
-    declined.wait_for(b"Label for the artifacts")
-    declined.send(b"\r")
-    declined.wait_for(b"Bundle folder")
+    review = b"Continue to final approval?"
+    declined.wait_for_count(review, 1)
+    declined.send(b"3\r")
+    declined.wait_for(b"Save folder")
+    declined.send(b"b\r")
+    declined.wait_for_count(review, 2)
+    declined.send(b"2\r")
+    declined.wait_for(b"Output name (used in the run record and default folder)")
+    declined.send(b"b\r")
+    declined.wait_for_count(review, 3)
     declined.send(b"\r")
     declined.wait_for(b"Type WEAVE")
     declined.send(b"b\r")
-    declined.wait_for_count(b"Bundle folder", 2)
-    declined.send(b"b\r")
-    declined.wait_for_count(b"Label for the artifacts", 2)
-    declined.send(b"\r")
-    declined.wait_for_count(b"Bundle folder", 3)
+    declined.wait_for_count(review, 4)
     declined.send(b"\r")
     declined.wait_for_count(b"Type WEAVE", 2)
     declined.send(b"NO\r")
     assert declined.finish() == 0
-    assert b"nothing was run" in declined.stream
+    assert b"nothing was written" in declined.stream
     assert not declined_out.exists()
 
     output = tmp_path / "approved"
@@ -676,9 +679,7 @@ def test_interactive_weave_named_approval_and_back_behavior(tmp_path: Path) -> N
         ],
         state=tmp_path / "approved-state.json",
     )
-    approved.wait_for(b"Label for the artifacts")
-    approved.send(b"\r")
-    approved.wait_for(b"Bundle folder")
+    approved.wait_for(b"Continue to final approval?")
     approved.send(b"\r")
     approved.wait_for(b"Type WEAVE")
     approved.send(b"WEAVE\r")
@@ -708,9 +709,7 @@ def test_interactive_source_replacement_restarts_review_without_build(
         ],
         state=tmp_path / "state.json",
     )
-    session.wait_for(b"Label for the artifacts")
-    session.send(b"\r")
-    session.wait_for(b"Bundle folder")
+    session.wait_for(b"Continue to final approval?")
     session.send(b"\r")
     session.wait_for(b"Type WEAVE")
     source.write_bytes(
@@ -722,7 +721,7 @@ def test_interactive_source_replacement_restarts_review_without_build(
     )
     session.send(b"WEAVE\r")
     session.wait_for(b"source changed after the displayed preflight", timeout=20)
-    session.wait_for_count(b"Label for the artifacts", 2, timeout=20)
+    session.wait_for_count(b"Continue to final approval?", 2, timeout=20)
     assert not output.exists()
     session.proc.send_signal(signal.SIGINT)
     assert session.finish() == 130
@@ -750,13 +749,16 @@ def test_interactive_regular_file_bundle_target_reprompts(
         ],
         state=tmp_path / "state.json",
     )
-    session.wait_for(b"Label for the artifacts")
+    review = b"Continue to final approval?"
+    session.wait_for_count(review, 1)
     session.send(b"\r")
-    session.wait_for(b"Bundle folder")
-    session.send(b"\r")
-    session.wait_for(b"must be a directory, not an existing file")
-    session.wait_for_count(b"Bundle folder", 2)
+    session.wait_for(b"save location is an existing file, not a folder")
+    session.wait_for_count(review, 2)
+    session.send(b"3\r")
+    session.wait_for(b"Save folder")
     session.send(str(alternate).encode() + b"\r")
+    session.wait_for_count(review, 3)
+    session.send(b"\r")
     session.wait_for(b"Type WEAVE")
     session.send(b"NO\r")
     assert session.finish() == 0
@@ -783,8 +785,8 @@ def test_back_at_both_fallback_prompts_navigates_without_writing(
         ],
         state=tmp_path / "state.json",
     )
-    even = b"Approve even level spacing"
-    equal = b"Approve equal criterion weights"
+    even = b"Use evenly spaced scores across its levels"
+    equal = b"Give each criterion equal weight"
     session.wait_for(even)
     session.send(b"b\r")
     session.wait_for_count(even, 2)
@@ -803,7 +805,7 @@ def test_interactive_door_router_can_quit(tmp_path: Path) -> None:
     from test_rubric_loom_wizard import PtyWizard
 
     session = PtyWizard(["--brisk"], state=tmp_path / "state.json")
-    session.wait_for(b"Which door should the loom open?")
+    session.wait_for(b"What do you want to do?")
     session.send(b"q\r")
     assert session.finish() == 0
     assert b"nothing was run." in session.stream

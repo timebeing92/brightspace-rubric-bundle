@@ -313,7 +313,7 @@ def test_interactive_template_copy_stops_for_editing_before_weave(
         ["--brisk", "--door", "weave"],
         state=tmp_path / "state.json",
     )
-    session.wait_for(b"Which authored rubric should the loom weave?")
+    session.wait_for(b"Where is the completed rubric you want to package?")
     session.send(b"template\r")
     session.wait_for(b"Release-pinned Weave templates")
     session.wait_for(b"Which editable template should the loom show?")
@@ -381,7 +381,7 @@ def test_template_browse_back_then_quit_is_filesystem_read_only(
         cwd=isolated_repo,
         env_overrides={"PYTHONDONTWRITEBYTECODE": "1"},
     )
-    source_prompt = b"Which authored rubric should the loom weave?"
+    source_prompt = b"Where is the completed rubric you want to package?"
     session.wait_for(source_prompt)
     session.send(b"template\r")
     session.wait_for(b"Which editable template should the loom show?")
@@ -430,7 +430,7 @@ def test_repeated_template_exits_keep_source_selection_constant_stack_and_read_o
     ):
         nonlocal current_mode, source_selections
         del term
-        if prompt == "Which authored rubric should the loom weave?":
+        if prompt == "Where is the completed rubric you want to package?":
             source_defaults.append(default)
             source_option_keys.append(tuple(key for key, _ in options))
             if source_selections == repetitions:

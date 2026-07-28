@@ -25,6 +25,29 @@ Both doors use `loom_progress.py` to consume the orchestrators'
 and final result handling; the shared consumer knows no rubric semantics and
 infers no artifacts.
 
+## Guided terminal flow
+
+The guided flow uses the same review-before-run pattern as the Blueprint
+Wizard:
+
+1. Choose what you want to do: read an existing export with **Unravel**, or
+   package a completed rubric with **Weave**.
+2. Select or drag the source file or folder into the terminal.
+3. Read the source check. Weave also shows its producer preflight, including
+   the adapter, rubric structure, scoring source, weight source, and any
+   diagnostics.
+4. Review one card containing the source, a recommended output name, the
+   exact filenames, and the save folder.
+5. Press Return to continue, or enter the number of the one item you want to
+   change. You are not asked to rename or relocate anything unless you choose
+   to.
+6. Unravel starts from that review card. Weave retains a separate final
+   safeguard: type `WEAVE` exactly to authorize package writing.
+
+At each review card, `q` leaves without running and `b` returns to the
+read-only source check. Error messages keep the user at the relevant screen
+and say which numbered item to change.
+
 ## Non-interactive use
 
 Every pre-R1 invocation remains Unravel:
@@ -85,7 +108,8 @@ media type, bytes, and SHA-256 that passed both pin and manifest checks.
 4. Read the pinned producer preflight.
 5. Review reported rubrics, labels, scoring/weight sources, and diagnostics.
 6. Make only the fallback decisions the producer requests.
-7. Confirm label and output folder.
+7. Review the recommended output name, exact import ZIP name, and save folder;
+   change only the numbered item that needs adjustment.
 8. Type the named final approval `WEAVE`.
 9. Watch the orchestrator's real six-step progress board.
 10. Start with the Brightspace import ZIP; review normalized JSON, mapping,
@@ -111,9 +135,11 @@ and remains protected from a containing `--force` output target.
 
 ## Interaction and terminal behavior
 
-- `b`/`back` reverses commission prompts and both fallback prompts; Back from
-  the second fallback returns to the first decision, while Back from the first
-  returns to source/preflight.
+- Return accepts recommended names and locations. Numbered review-card actions
+  open only the selected setting.
+- `b`/`back` leaves an edit unchanged or returns a review card to the
+  source/preflight. Back from the second fallback returns to the first scoring
+  decision, while Back from the first returns to source/preflight.
 - `q` leaves the landing or door router without running.
 - Ctrl-C returns `130`; a running child receives SIGINT and no incomplete
   Weave artifact is presented as deliverable.

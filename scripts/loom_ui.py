@@ -341,6 +341,46 @@ def choose(
         print(term.secondary(f"    enter 1-{len(options)}"))
 
 
+def review_choice(
+    term: Term,
+    prompt: str,
+    *,
+    choices: tuple[str, ...],
+    allow_back: bool = False,
+    allow_quit: bool = True,
+):
+    """Read a review-card action.
+
+    Return means continue, a listed number means edit that row, and the
+    optional navigation keys remain available without crowding the card
+    itself. This follows the Blueprint Wizard's review-before-run pattern.
+    """
+    hints = ["Return = continue", f"{'/'.join(choices)} = change"]
+    if allow_back:
+        hints.append("b = back")
+    if allow_quit:
+        hints.append("q = leave")
+    suffix = term.secondary("  [" + " · ".join(hints) + "]")
+    while True:
+        try:
+            reply = input(f"  {term.accent('?')} {prompt}{suffix}: ").strip().lower()
+        except EOFError:
+            print("")
+            return ""
+        if not reply:
+            return ""
+        if allow_back and reply in {"b", "back"}:
+            return BACK
+        if allow_quit and reply in {"q", "quit"}:
+            return "q"
+        if reply in choices:
+            return reply
+        valid = ", ".join(choices)
+        navigation = ", b" if allow_back else ""
+        navigation += ", q" if allow_quit else ""
+        print(term.secondary(f"    press Return, or enter {valid}{navigation}"))
+
+
 # ---------------------------------------------------------------------------
 # Live step board
 # ---------------------------------------------------------------------------

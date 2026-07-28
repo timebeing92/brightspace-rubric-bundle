@@ -1,4 +1,57 @@
-# brightspace-rubric-bundle
+# Rubric Loom
+
+<p align="center">
+  <img src="docs/assets/rubric-loom-terminal.svg"
+       alt="Color pixel-art Rubric Loom with warp threads, woven cloth, and a shuttle"
+       width="620">
+</p>
+
+Rubric Loom is a guided local tool for people who need to inspect, revise, or
+move Brightspace rubrics without hand-editing D2L XML. It runs on your
+computer and opens through one of two doors:
+
+| Door | Bring | Take away |
+| --- | --- | --- |
+| **Unravel** | A Brightspace course-export ZIP, an unpacked export folder, or a bare `rubrics_d2l.xml` | A review workbook, structured rubric JSON, and a reviewer DOCX |
+| **Weave** | A completed rubric in a supported DOCX table, Markdown table, or JSON format | Producer preflight followed by a validated, rubric-only Brightspace import package and its review/receipt companions |
+
+Rubric Loom has no AI component. It is deterministic, rules-based Python
+software that reads and writes against known Brightspace/D2L package
+structures. Processing stays on your computer, and the Loom does not change
+Brightspace: you review every output, import a Weave package yourself, and
+attach imported rubrics to activities manually.
+
+## Start here
+
+**On macOS:** clone or download this repository, then double-click
+`launch_rubric_loom.command`. The launcher checks for Python 3.11–3.13 and,
+on the first run, offers to create a local `.venv` inside this folder.
+
+**From a terminal:** use any installed Python 3.11, 3.12, or 3.13:
+
+```bash
+python3.13 scripts/bootstrap_env.py
+.venv/bin/python scripts/rubric_loom_wizard.py
+```
+
+Substitute `python3.11` or `python3.12` when that is the supported Python on
+your machine.
+
+The terminal guide chooses sensible file and folder names after it reads your
+source. Before anything is written, one review card shows the source, exact
+filenames, save folder, and relevant review options. Press Return to use the
+recommendations, or enter the number of the one item you want to change.
+Weave also shows its producer preflight and requires the final named approval
+`WEAVE`.
+
+Want to look around before using your own files? The macOS launcher includes
+synthetic demonstrations for both Unravel and Weave. The examples contain no
+course, learner, or institutional data.
+
+For detailed terminal and headless options, see
+[`docs/RUBRIC_LOOM_WIZARD.md`](docs/RUBRIC_LOOM_WIZARD.md).
+
+## Technical overview
 
 This repository is the portable producer for **Rubric Loom**: one rubric
 service with two doors that converge on the Brightspace rubric dialect

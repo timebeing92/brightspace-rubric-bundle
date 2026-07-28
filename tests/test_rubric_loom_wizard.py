@@ -241,7 +241,7 @@ def test_yes_ignores_remembered_answers(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (run_dir / "tiny_rubrics_export__rubrics.docx").is_file()
-    assert b"reviewer DOCX  yes" in result.stdout.replace(b"   ", b"  ")
+    assert b"review DOCX  yes" in result.stdout.replace(b"   ", b"  ")
 
 
 def test_default_bundle_dir_is_repo_anchored(tmp_path: Path) -> None:
@@ -322,7 +322,7 @@ def test_source_without_evidence_exits_3_with_honest_copy(
     assert "no rubric evidence sighted" in stdout
     assert "A thread snapped — the scroll below tells why." in stdout
     assert "nothing to unravel" in stdout  # the orchestrator's own words
-    assert "The loom accepts" in stdout  # the Empty-state obligation
+    assert "Bring a Brightspace course-export ZIP" in stdout
 
 
 def test_failure_into_occupied_dir_claims_no_stale_delivery(
@@ -599,20 +599,16 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
     session.wait_for(b"R U B R I C   L O O M")
     # The landing orients before anything runs: what it is, what you
     # bring, how to steer - then a named-action Return.
-    session.wait_for(b"Welcome to the loom")
-    session.wait_for(b"you bring")
-    session.wait_for(b"b steps back a screen")
-    session.wait_for(b"Return opens the workshop")
+    session.wait_for(b"What would you like to do?")
+    session.wait_for(b"Unravel")
+    session.wait_for(b"Rubric Loom has no AI component")
+    session.wait_for(b"Press Return to check the workshop")
     session.send(b"\r")
     session.wait_for(b"The loom is threaded.")
     session.wait_for(b"[workshop]")  # the journey trail marks the phase
-    session.wait_for(b"Label for the artifacts")
-    session.send(b"\r")
-    session.wait_for(b"Bundle folder")
-    session.send(b"\r")
-    session.wait_for(b"reviewer DOCX")
-    session.send(b"\r")
-    session.wait_for(b"Start the unravel")
+    session.wait_for(b"Ready to unravel")
+    session.wait_for(b"tiny_rubrics_export__rubrics.docx")
+    session.wait_for(b"Start Unravel?")
     board_started = time.monotonic()
     session.send(b"\r")
     session.wait_for("The cloth is bound ✦".encode("utf-8"), timeout=30.0)
@@ -622,7 +618,7 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
     assert (out_dir / "tiny_rubrics_export__rubrics.docx").is_file()
     stream = session.stream.decode("utf-8", "replace")
     assert "The workshop" in stream
-    assert "The commission" in stream
+    assert "Review the output" in stream
     assert "The unravelling" in stream
     assert "Reading the weave" in stream  # flavor from the approved sample
     # Display-only pacing: four steps held >= MIN_STEP_SECONDS each, so a
@@ -633,7 +629,7 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
 @pytestmark_pty
 def test_pty_landing_q_leaves_without_running(tmp_path: Path) -> None:
     session = PtyWizard([], state=tmp_path / "state.json")
-    session.wait_for(b"Return opens the workshop")
+    session.wait_for(b"Press Return to check the workshop")
     session.send(b"q\r")
     code = session.finish()
     assert code == 0
@@ -642,43 +638,33 @@ def test_pty_landing_q_leaves_without_running(tmp_path: Path) -> None:
 
 @pytestmark_pty
 def test_pty_back_navigation_walks_every_edge(tmp_path: Path) -> None:
-    """b steps back one screen at every prompt: label -> source,
-    bundle -> label, DOCX -> bundle, confirm -> DOCX; n at the confirm
-    leaves without running."""
+    """The review card changes one item at a time; b exits an edit without
+    changing it and returns from the card to the read-only source check."""
     out_dir = tmp_path / "run"
     session = PtyWizard(
         ["--brisk", "--source", str(FIXTURE), "--output-dir", str(out_dir)],
         state=tmp_path / "state.json",
     )
-    label = b"Label for the artifacts"
-    bundle = b"Bundle folder"
-    docx = b"Render the reviewer DOCX?"
-    start = b"Start the unravel"
-    peek_title = b"What the loom can see"
+    review = b"Start Unravel?"
+    source_check = b"Course export check"
 
-    session.wait_for_count(label, 1)
-    session.send(b"b\r")  # label -> source (peek re-shown)
-    session.wait_for_count(peek_title, 2)
-    session.wait_for_count(label, 2)
-    session.send(b"\r")
-    session.wait_for_count(bundle, 1)
-    session.send(b"b\r")  # bundle -> label
-    session.wait_for_count(label, 3)
-    session.send(b"\r")
-    session.wait_for_count(bundle, 2)
-    session.send(b"\r")
-    session.wait_for_count(docx, 1)
-    session.send(b"b\r")  # DOCX -> bundle
-    session.wait_for_count(bundle, 3)
-    session.send(b"\r")
-    session.wait_for_count(docx, 2)
-    session.send(b"\r")
-    session.wait_for_count(start, 1)
-    session.send(b"b\r")  # confirm -> DOCX
-    session.wait_for_count(docx, 3)
-    session.send(b"\r")
-    session.wait_for_count(start, 2)
-    session.send(b"n\r")
+    session.wait_for_count(review, 1)
+    session.send(b"2\r")
+    session.wait_for(b"Output name (used at the start of each filename)")
+    session.send(b"b\r")
+    session.wait_for_count(review, 2)
+    session.send(b"3\r")
+    session.wait_for(b"Save folder")
+    session.send(b"b\r")
+    session.wait_for_count(review, 3)
+    session.send(b"4\r")
+    session.wait_for(b"Create the reviewer DOCX?")
+    session.send(b"b\r")
+    session.wait_for_count(review, 4)
+    session.send(b"b\r")
+    session.wait_for_count(source_check, 2)
+    session.wait_for_count(review, 5)
+    session.send(b"q\r")
     code = session.finish()
     assert code == 0
     assert b"nothing was run." in session.stream

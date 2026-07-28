@@ -83,12 +83,12 @@ PRODUCED_BY = {
 }
 
 ACCEPTS_LINE = (
-    "The loom accepts a Brightspace course export zip, an unpacked export "
-    "folder, or a bare rubrics_d2l.xml (Course Admin > Import/Export/Copy "
-    "Components > Export produces the zip)."
+    "Bring a Brightspace course-export ZIP, an unpacked export folder, or a "
+    "bare rubrics_d2l.xml. In Brightspace, Course Admin > Import/Export/Copy "
+    "Components > Export Course Components creates the ZIP."
 )
 
-PHASES = ("workshop", "source", "commission", "unravelling")
+PHASES = ("workshop", "source", "review", "unravelling")
 
 
 def trail(term: loom_ui.Term, current: str) -> str:
@@ -112,25 +112,25 @@ def landing(term: loom_ui.Term) -> bool:
     """The welcome screen: what this is, what you bring, what you get,
     and how to steer. Returns False when the operator leaves here."""
     rows: list[tuple[str, str]] = [
-        ("", "The Rubric Loom has two doors for Brightspace rubrics:"),
-        ("", "Unravel reads an export; Weave builds an import package."),
+        ("Unravel", "Read rubrics from a Brightspace course export."),
+        ("  Bring", "An export ZIP, unpacked export, or rubrics_d2l.xml."),
+        ("  Get", "A reviewer DOCX, editing workbook, and structured JSON."),
         ("", ""),
-        ("you bring", "a course export for Unravel, or an authored DOCX,"),
-        (" ", "Markdown, or JSON rubric for Weave"),
-        ("you get", "review artifacts from Unravel, or a validated rubric-"),
-        (" ", "only Brightspace import ZIP from Weave"),
+        ("Weave", "Build an import package from a completed rubric."),
+        ("  Bring", "A supported Word, Markdown, or JSON rubric."),
+        ("  Get", "A validated, rubric-only Brightspace import ZIP."),
         ("", ""),
-        ("", "Everything runs on this machine. Nothing is sent anywhere;"),
-        ("", "nothing touches Brightspace."),
+        ("", "Rubric Loom has no AI component. Deterministic Python runs"),
+        ("", "locally against known D2L structures; nothing is imported."),
     ]
-    print(loom_ui.card(term, "Welcome to the loom", rows))
+    print(loom_ui.card(term, "What would you like to do?", rows))
     print(trail(term, "workshop"))
     guidance(
         term,
-        "Return accepts a suggestion · b steps back a screen · Ctrl-C "
-        "leaves cleanly at any point",
+        "Return accepts a recommended choice. You will review file names and "
+        "the save folder before anything is written.",
     )
-    reply = loom_ui.prompt_text(term, "Return opens the workshop (q leaves)")
+    reply = loom_ui.prompt_text(term, "Press Return to check the workshop (q leaves)")
     if isinstance(reply, str) and reply.strip().lower() in {"q", "quit"}:
         print("  nothing was run.")
         return False
@@ -453,38 +453,71 @@ def input_lane_candidates() -> list[Path]:
 
 
 def pick_source(term: loom_ui.Term, remembered: str) -> Path | None:
-    print(ACCEPTS_LINE)
-    candidates = input_lane_candidates()
-    remembered_path = Path(remembered) if remembered else None
-    options: list[tuple[str, str]] = []
-    default = "path"
-    for index, path in enumerate(candidates, start=1):
-        options.append((str(index), f"{relative_display(path)}  ({source_kind(path)})"))
-        if remembered_path is not None and path == remembered_path:
-            default = str(index)
-    options.append(("path", "type a path"))
-    options.append(
-        ("demo", f"the pinned synthetic fixture ({relative_display(FIXTURE)})")
-    )
-    if default == "path" and remembered_path == FIXTURE:
-        default = "demo"
-    choice = loom_ui.choose(
-        term, "Which source should the loom unravel?", options, default=default
-    )
-    if choice == "demo":
-        return FIXTURE
-    if choice == "path":
-        for _ in range(3):
-            raw = loom_ui.prompt_text(term, "Path to the export", default=remembered)
-            candidate = parse_typed_path(raw)
-            if candidate is None:
-                print("  nothing chosen; the loom stays idle")
-                return None
-            if candidate.exists():
-                return candidate
-            print(loom_ui.status_line(term, "bad", f"not found: {raw}"))
-        return None
-    return candidates[int(choice) - 1]
+    print("  " + ACCEPTS_LINE)
+    while True:
+        candidates = input_lane_candidates()
+        remembered_path = Path(remembered) if remembered else None
+        options: list[tuple[str, str]] = []
+        default = "path"
+        for index, path in enumerate(candidates, start=1):
+            options.append(
+                (
+                    str(index),
+                    f"Use {relative_display(path)}  ({source_kind(path)})",
+                )
+            )
+            if remembered_path is not None and path == remembered_path:
+                default = str(index)
+        options.append(("path", "Enter or drag a different file or folder path"))
+        options.append(
+            (
+                "demo",
+                f"Try the built-in demonstration  ({relative_display(FIXTURE)})",
+            )
+        )
+        options.append(("q", "Leave without running"))
+        if default == "path" and remembered_path == FIXTURE:
+            default = "demo"
+        choice = loom_ui.choose(
+            term,
+            "Where is the course export you want to read?",
+            options,
+            default=default,
+            allow_back=True,
+        )
+        if choice is loom_ui.BACK or choice == "q":
+            return None
+        if choice == "demo":
+            return FIXTURE
+        if choice == "path":
+            while True:
+                guidance(
+                    term,
+                    "Tip: drag the ZIP or folder into this window to paste its path.",
+                )
+                raw = loom_ui.prompt_text(
+                    term,
+                    "Course export path",
+                    default=remembered,
+                    allow_back=True,
+                )
+                if raw is loom_ui.BACK:
+                    break
+                candidate = parse_typed_path(str(raw))
+                if candidate is None:
+                    print("  no source was selected.")
+                    return None
+                if candidate.exists():
+                    return candidate
+                print(
+                    loom_ui.status_line(
+                        term,
+                        "bad",
+                        f"I could not find that file or folder: {raw}",
+                    )
+                )
+            continue
+        return candidates[int(choice) - 1]
 
 
 def peek_card(term: loom_ui.Term, source: Path, seen: dict) -> None:
@@ -502,7 +535,83 @@ def peek_card(term: loom_ui.Term, source: Path, seen: dict) -> None:
     if seen["sighted"] is not None:
         rows.append(("rubrics sighted", str(seen["sighted"])))
     rows.append(("course title", seen["title"] or "(no manifest in this source)"))
-    print(loom_ui.card(term, "What the loom can see", rows))
+    print(loom_ui.card(term, "Course export check", rows))
+
+
+def _review_docx_text(use_docx: bool, args, docx_ok: bool) -> str:
+    if args.no_docx:
+        return "no — disabled by --no-docx"
+    if not docx_ok:
+        return "unavailable — python-docx is not installed"
+    if use_docx:
+        return "yes — recommended starting point for review"
+    return "no — workbook and JSON only"
+
+
+def unravel_review_rows(
+    source: Path,
+    label: str,
+    out_dir: Path,
+    use_docx: bool,
+    args,
+    docx_ok: bool,
+) -> list[tuple[str, str]]:
+    rows = [
+        ("1. Source", relative_display(source)),
+        ("2. Output name", label),
+    ]
+    if use_docx:
+        rows.append(("   Review file", f"{label}__rubrics.docx"))
+    rows.extend(
+        [
+            ("   Edit file", f"{label}__rubrics.xlsx"),
+            ("   Data file", f"{label}__rubrics.json"),
+            ("3. Save folder", relative_display(out_dir)),
+            ("4. Review DOCX", _review_docx_text(use_docx, args, docx_ok)),
+            ("", ""),
+            ("", "Nothing is written until you press Return to start."),
+        ]
+    )
+    return rows
+
+
+def unravel_destination_ready(term: loom_ui.Term, out_dir: Path) -> bool:
+    try:
+        mode = out_dir.lstat().st_mode
+    except FileNotFoundError:
+        return True
+    except OSError:
+        print(
+            loom_ui.status_line(
+                term, "bad", "The save folder could not be inspected."
+            )
+        )
+        return False
+    if stat.S_ISLNK(mode):
+        print(
+            loom_ui.status_line(
+                term, "bad", "Choose a save folder that is not a symbolic link."
+            )
+        )
+        return False
+    if not stat.S_ISDIR(mode):
+        print(
+            loom_ui.status_line(
+                term,
+                "bad",
+                "The save location is an existing file, not a folder.",
+            )
+        )
+        return False
+    if any(out_dir.iterdir()):
+        return bool(
+            loom_ui.confirm(
+                term,
+                "This folder already contains files. Replace matching Loom files?",
+                default=False,
+            )
+        )
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -620,17 +729,30 @@ def results_card(
 
     print()
     counts = f"{rubrics} rubric(s), {diagnostics} diagnostic(s)"
-    rows: list[tuple[str, str]] = [("unraveled", counts)]
+    rows: list[tuple[str, str]] = [("Read from export", counts)]
     if use_docx and outputs.get("rubrics_docx"):
-        rows.append(("start here", f"{relative_display(paths['reviewer DOCX'])}  — the reviewer document"))
-    rows.append(("workbook", f"{relative_display(paths['workbook'])}  — for editing workflows"))
-    rows.append(("contract", relative_display(paths["contract JSON"])))
-    rows.append(("bundle", relative_display(out_dir)))
-    rows.append(("log", relative_display(log_path)))
+        rows.append(
+            (
+                "start here",
+                f"{relative_display(paths['reviewer DOCX'])}  — review document",
+            )
+        )
+    rows.append(
+        (
+            "Editing workbook",
+            f"{relative_display(paths['workbook'])}  — structured editing",
+        )
+    )
+    rows.append(("Structured JSON", relative_display(paths["contract JSON"])))
+    rows.append(("Output folder", relative_display(out_dir)))
+    rows.append(("Run log", relative_display(log_path)))
     if use_docx and outputs.get("rubrics_docx"):
-        next_action = "Next: review the DOCX; edit in the workbook if changes are needed."
+        next_action = (
+            "Next: review the DOCX. Use the workbook when you need to revise "
+            "rubric content in a structured form."
+        )
     else:
-        next_action = "Next: open the workbook to review and edit the rubrics."
+        next_action = "Next: open the workbook to review and revise the rubrics."
     rows += wrap_rows(next_action)
     print(loom_ui.card(term, VOICE_BOUND, rows))
 
@@ -774,8 +896,8 @@ def _show_source_peek(term: loom_ui.Term, source: Path) -> dict:
     peek_card(term, source, seen)
     guidance(
         term,
-        "If this looks right, continue - the loom asks once more before "
-        "writing anything.",
+        "The source has only been inspected. Review the proposed output names "
+        "and save folder next.",
     )
     return seen
 
@@ -803,8 +925,8 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
     if note:
         print(loom_ui.status_line(term, "warn", note))
 
-    print(loom_ui.heading(term, "The commission", "3 of 4"))
-    print(trail(term, "commission"))
+    print(loom_ui.heading(term, "Review the output", "3 of 4"))
+    print(trail(term, "review"))
     label = (
         unravel.sanitize_label(args.label) if args.label
         else unravel.default_label(source)
@@ -825,9 +947,9 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
     use_docx = not args.no_docx and docx_ok
     rows = [
         ("source", relative_display(source)),
-        ("label", label),
-        ("bundle", relative_display(out_dir)),
-        ("reviewer DOCX", _docx_note(use_docx, args, docx_ok)),
+        ("output name", label),
+        ("save folder", relative_display(out_dir)),
+        ("review DOCX", _docx_note(use_docx, args, docx_ok)),
     ]
     print(loom_ui.card(term, "Ready to unravel", rows))
     loom_ui.confirm(
@@ -840,17 +962,21 @@ def _run_headless(term: loom_ui.Term, args, docx_ok: bool) -> int:
 
 
 def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
-    """The reversible journey: source → label → bundle → DOCX → confirm,
-    with ``b`` stepping back one screen at every prompt."""
+    """A source check followed by one editable review card.
+
+    Recommended names are chosen automatically. The operator sees the exact
+    folder and filenames before writing, and only opens a separate prompt for
+    a value they choose to change.
+    """
     state = door_state(load_state(), "unravel")
     source: Path | None = None
     peeked_for: Path | None = None
     label: str | None = None
     out_dir: Path | None = None
-    out_dir_typed = False
     use_docx: bool | None = None
+    automatic_label = True
+    automatic_folder = args.output_dir is None
     step = "source"
-    prev = ""
 
     while True:
         if step == "source":
@@ -858,19 +984,10 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
             print(trail(term, "source"))
             guidance(
                 term,
-                "Point the loom at an export. A number picks from the "
-                "list; Return takes the suggestion.",
+                "Choose the Brightspace export to read. This check is read-only.",
             )
-            if args.source is not None and source is None:
+            if args.source is not None:
                 source = args.source.expanduser()
-                print(
-                    loom_ui.status_line(
-                        term, "ok", f"source: {relative_display(source)}"
-                    )
-                )
-            elif args.source is not None:
-                # Backed into a flag-pinned source: show it again so the
-                # peek can be re-read; the flag stays the source of truth.
                 print(
                     loom_ui.status_line(
                         term, "ok", f"source: {relative_display(source)}"
@@ -904,109 +1021,110 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
                     print("  nothing was run.")
                     return 0
             peeked_for = source
-            prev, step = "source", "label"
-
-        elif step == "label":
-            if prev == "source":
-                print(loom_ui.heading(term, "The commission", "3 of 4"))
-                print(trail(term, "commission"))
-                guidance(
-                    term,
-                    "Name the cloth and where it goes. Return accepts "
-                    "each suggestion; b steps back.",
-                )
-            default_label = label or (
-                unravel.sanitize_label(args.label) if args.label
+            recommended = (
+                unravel.sanitize_label(args.label)
+                if args.label
                 else unravel.default_label(source)
             )
-            reply = loom_ui.prompt_text(
-                term,
-                "Label for the artifacts",
-                default=default_label,
-                allow_back=True,
-            )
-            if reply is loom_ui.BACK:
-                prev, step = "label", "source"
-                continue
-            label = unravel.sanitize_label(str(reply))
-            prev, step = "label", "bundle"
-
-        elif step == "bundle":
-            if out_dir_typed and out_dir is not None:
-                default_dir = out_dir
-            elif args.output_dir is not None:
-                default_dir = args.output_dir
-            else:
-                default_dir = default_bundle_dir(label)
-            reply = loom_ui.prompt_text(
-                term, "Bundle folder", default=str(default_dir), allow_back=True
-            )
-            if reply is loom_ui.BACK:
-                prev, step = "bundle", "label"
-                continue
-            typed = parse_typed_path(str(reply))
-            out_dir = typed if typed is not None else default_dir
-            out_dir_typed = str(out_dir) != str(default_bundle_dir(label))
-            if out_dir.exists() and any(out_dir.iterdir()):
-                print(
-                    loom_ui.status_line(
-                        term,
-                        "warn",
-                        f"{relative_display(out_dir)} is not empty; "
-                        "matching artifacts will be overwritten",
-                    )
+            if label is None or automatic_label:
+                label = recommended
+            if use_docx is None:
+                use_docx = (
+                    not args.no_docx
+                    and docx_ok
+                    and bool(state.get("docx", True))
                 )
-                if not loom_ui.confirm(
-                    term, "Weave into it anyway?", default=False
-                ):
-                    continue  # stay here; choose a different folder
-            prev, step = "bundle", "docx"
+            if out_dir is None or automatic_folder:
+                out_dir = (
+                    args.output_dir
+                    if args.output_dir is not None
+                    else default_bundle_dir(label)
+                )
+            step = "review"
 
-        elif step == "docx":
-            if args.no_docx or not docx_ok:
-                use_docx = False
-                prev, step = "docx", "confirm"
-                continue
-            default_docx = (
-                use_docx if use_docx is not None
-                else bool(state.get("docx", True))
-            )
-            reply = loom_ui.confirm(
-                term,
-                "Render the reviewer DOCX?",
-                default=default_docx,
-                allow_back=True,
-            )
-            if reply is loom_ui.BACK:
-                prev, step = "docx", "bundle"
-                continue
-            use_docx = bool(reply)
-            prev, step = "docx", "confirm"
-
-        elif step == "confirm":
-            rows = [
-                ("source", relative_display(source)),
-                ("label", label),
-                ("bundle", relative_display(out_dir)),
-                ("reviewer DOCX", _docx_note(use_docx, args, docx_ok)),
-            ]
-            print(loom_ui.card(term, "Ready to unravel", rows))
+        elif step == "review":
+            assert source is not None
+            assert label is not None
+            assert out_dir is not None
+            assert use_docx is not None
+            print(loom_ui.heading(term, "Review the output", "3 of 4"))
+            print(trail(term, "review"))
             guidance(
                 term,
-                "Return starts it · b steps back · n leaves without running",
+                "Recommended names are ready. Press Return to start, or change "
+                "only the item you need.",
             )
-            reply = loom_ui.confirm(
+            print(
+                loom_ui.card(
+                    term,
+                    "Ready to unravel",
+                    unravel_review_rows(
+                        source, label, out_dir, use_docx, args, docx_ok
+                    ),
+                )
+            )
+            reply = loom_ui.review_choice(
                 term,
-                f"Start the unravel into {relative_display(out_dir)}?",
-                default=True,
+                "Start Unravel?",
+                choices=("1", "2", "3", "4"),
                 allow_back=True,
             )
-            if reply is loom_ui.BACK:
-                prev, step = "confirm", "docx"
-                continue
-            if not reply:
+            if reply == "q":
                 print("  nothing was run.")
                 return 0
+            if reply is loom_ui.BACK or reply == "1":
+                if args.source is None:
+                    source = None
+                step = "source"
+                continue
+            if reply == "2":
+                changed = loom_ui.prompt_text(
+                    term,
+                    "Output name (used at the start of each filename)",
+                    default=label,
+                    allow_back=True,
+                )
+                if changed is not loom_ui.BACK:
+                    label = unravel.sanitize_label(str(changed))
+                    automatic_label = False
+                    if automatic_folder:
+                        out_dir = default_bundle_dir(label)
+                continue
+            if reply == "3":
+                changed = loom_ui.prompt_text(
+                    term,
+                    "Save folder",
+                    default=str(out_dir),
+                    allow_back=True,
+                )
+                if changed is not loom_ui.BACK:
+                    parsed = parse_typed_path(str(changed))
+                    if parsed is not None:
+                        out_dir = parsed
+                        automatic_folder = False
+                continue
+            if reply == "4":
+                if args.no_docx or not docx_ok:
+                    print(
+                        loom_ui.status_line(
+                            term,
+                            "warn",
+                            _review_docx_text(False, args, docx_ok),
+                        )
+                    )
+                else:
+                    changed = loom_ui.confirm(
+                        term,
+                        "Create the reviewer DOCX?",
+                        default=use_docx,
+                        allow_back=True,
+                    )
+                    if changed is not loom_ui.BACK:
+                        use_docx = bool(changed)
+                continue
+            if not unravel_destination_ready(term, out_dir):
+                guidance(term, "Enter 3 on the review card to choose another folder.")
+                continue
             return _start_unravel(term, args, source, out_dir, label, use_docx)
 
 
@@ -1014,18 +1132,31 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
     remembered = str(state.get("last_door") or "unravel")
     if remembered not in {"unravel", "weave"}:
         remembered = "unravel"
+    print()
+    print(
+        loom_ui.card(
+            term,
+            "Choose a door",
+            [
+                ("Unravel", "Course export → review DOCX, workbook, and JSON"),
+                ("Weave", "Completed rubric → Brightspace rubric import ZIP"),
+                ("", ""),
+                ("", "Both doors run locally and show exact outputs before writing."),
+            ],
+        )
+    )
     return str(
         loom_ui.choose(
             term,
-            "Which door should the loom open?",
+            "What do you want to do?",
             [
                 (
                     "unravel",
-                    "Unravel — read rubrics from a Brightspace export",
+                    "Unravel rubrics from an existing course export",
                 ),
                 (
                     "weave",
-                    "Weave — build a rubric-only Brightspace import package",
+                    "Weave a completed rubric into an import package",
                 ),
                 ("q", "Leave the loom without running"),
             ],
@@ -1136,7 +1267,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
 
         # -- The workshop -------------------------------------------------
-        print(loom_ui.heading(term, "The workshop", "1 of 4"))
+        print(loom_ui.heading(term, "The workshop", "setup"))
         print("  " + term.bold("[workshop]") + term.dim("  ·  shared checks for both doors"))
         guidance(term, "The loom checks its own equipment; nothing has run yet.")
         core_ok, docx_ok = run_doctor(term)

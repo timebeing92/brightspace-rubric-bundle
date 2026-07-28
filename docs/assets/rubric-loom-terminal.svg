@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="336"
+     viewBox="0 0 520 336"
+     role="img" aria-labelledby="loom-title loom-desc">
+  <title id="loom-title">Rubric Loom terminal splash</title>
+  <desc id="loom-desc">A color pixel-art loom with warp threads, woven cloth,
+  a shuttle, and small sparks, followed by the words Rubric Loom.</desc>
+  <rect width="520" height="336" rx="14" fill="#081722"/>
+  <rect x="1" y="1" width="518" height="334" rx="13" fill="none"
+        stroke="#1d3b4d" stroke-width="2"/>
+  <g transform="translate(30 24) scale(10)" shape-rendering="crispEdges">
+    <defs>
+      <pattern id="cloth" width="2" height="2"
+               patternUnits="userSpaceOnUse">
+        <rect width="1" height="1" fill="#d75faf"/>
+        <rect x="1" width="1" height="1" fill="#af5f87"/>
+        <rect y="1" width="1" height="1" fill="#af5f87"/>
+        <rect x="1" y="1" width="1" height="1" fill="#d75faf"/>
+      </pattern>
+    </defs>
+
+    <!-- frame and feet: xterm-256 colors 137 and 94 -->
+    <g fill="#af875f">
+      <rect x="2" y="3" width="40" height="1"/>
+      <rect x="2" y="4" width="2" height="17"/>
+      <rect x="40" y="4" width="2" height="17"/>
+      <rect x="2" y="20" width="40" height="1"/>
+    </g>
+    <g fill="#875f00">
+      <rect x="2" y="21" width="2" height="2"/>
+      <rect x="40" y="21" width="2" height="2"/>
+    </g>
+
+    <!-- warp: xterm-256 color 187 -->
+    <g fill="#d7d7af">
+      <rect x="5" y="4" width="1" height="10"/>
+      <rect x="7" y="4" width="1" height="10"/>
+      <rect x="9" y="4" width="1" height="10"/>
+      <rect x="11" y="4" width="1" height="10"/>
+      <rect x="13" y="4" width="1" height="10"/>
+      <rect x="15" y="4" width="1" height="10"/>
+      <rect x="17" y="4" width="1" height="10"/>
+      <rect x="19" y="4" width="1" height="10"/>
+      <rect x="21" y="4" width="1" height="10"/>
+      <rect x="23" y="4" width="1" height="10"/>
+      <rect x="25" y="4" width="1" height="10"/>
+      <rect x="27" y="4" width="1" height="10"/>
+      <rect x="29" y="4" width="1" height="10"/>
+      <rect x="31" y="4" width="1" height="10"/>
+      <rect x="33" y="4" width="1" height="10"/>
+      <rect x="35" y="4" width="1" height="10"/>
+      <rect x="37" y="4" width="1" height="10"/>
+      <rect x="39" y="4" width="1" height="10"/>
+    </g>
+
+    <!-- laid weft, shuttle, and woven cloth -->
+    <rect x="4" y="13" width="10" height="1" fill="#ff87af"/>
+    <rect x="14" y="13" width="1" height="1" fill="#af875f"/>
+    <rect x="15" y="13" width="6" height="1" fill="#d7af5f"/>
+    <rect x="21" y="13" width="1" height="1" fill="#af875f"/>
+    <rect x="4" y="14" width="36" height="6" fill="url(#cloth)"/>
+
+    <!-- sparks: xterm-256 color 222 -->
+    <g fill="#ffd787">
+      <rect x="22" y="0" width="1" height="1"/>
+      <rect x="5" y="1" width="1" height="1"/>
+      <rect x="40" y="1" width="1" height="1"/>
+      <rect x="22" y="5" width="1" height="1"/>
+      <rect x="34" y="11" width="1" height="1"/>
+    </g>
+  </g>
+  <text x="260" y="290" fill="#f4f7f8" font-size="16"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-weight="700" letter-spacing="4" text-anchor="middle">
+    R U B R I C  L O O M
+  </text>
+  <text x="260" y="316" fill="#aab8c1" font-size="11"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        text-anchor="middle">
+    Unravel exports · Weave rubric-only import packages
+  </text>
+</svg>
