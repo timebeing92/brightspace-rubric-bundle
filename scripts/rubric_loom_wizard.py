@@ -124,7 +124,7 @@ def trail(term: loom_ui.Term, current: str) -> str:
 
 def guidance(term: loom_ui.Term, text: str) -> None:
     """One quiet what-do-I-do-here line. Informative copy stays plain."""
-    print("  " + term.dim(text))
+    print(loom_ui.paragraph(term, text, dim=True))
 
 
 # ---------------------------------------------------------------------------
@@ -716,7 +716,8 @@ def input_lane_candidates() -> list[Path]:
 
 
 def pick_source(term: loom_ui.Term, remembered: str) -> Path | None:
-    print("  " + ACCEPTS_LINE)
+    print(loom_ui.paragraph(term, ACCEPTS_LINE))
+    print()
     while True:
         candidates = input_lane_candidates()
         remembered_path = Path(remembered) if remembered else None
@@ -754,10 +755,12 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None:
             return FIXTURE
         if choice == "path":
             while True:
+                print()
                 guidance(
                     term,
                     "Tip: drag the ZIP or folder into this window to paste its path.",
                 )
+                print()
                 raw = loom_ui.prompt_text(
                     term,
                     "Course export path",
@@ -1259,10 +1262,12 @@ def _run_interactive(term: loom_ui.Term, args, docx_ok: bool) -> int:
         if step == "source":
             print(loom_ui.heading(term, "The source", "1 of 3"))
             print(trail(term, "source"))
+            print()
             guidance(
                 term,
                 "Choose the Brightspace export to read. This check is read-only.",
             )
+            print()
             if args.source is not None:
                 source = args.source.expanduser()
                 print(

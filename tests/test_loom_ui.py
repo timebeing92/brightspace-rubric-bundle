@@ -109,6 +109,53 @@ def test_prompts_return_back_sentinel_only_when_allowed(monkeypatch, capsys) -> 
     capsys.readouterr()
 
 
+def test_choice_menu_uses_space_to_separate_prompt_options_and_input(
+    monkeypatch, capsys
+) -> None:
+    term = plain_term()
+    prompts: list[str] = []
+
+    def fake_input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return ""
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    assert (
+        loom_ui.choose(
+            term,
+            "Where is the source?",
+            [("path", "Enter a path"), ("demo", "Try the demonstration")],
+            default="path",
+            allow_back=True,
+        )
+        == "path"
+    )
+    output = capsys.readouterr().out
+    assert output == (
+        "  ? Where is the source?\n"
+        "\n"
+        "      1. Enter a path (default)\n"
+        "      2. Try the demonstration\n"
+        "\n"
+    )
+    assert prompts == ["    choice [1] (b = back): "]
+
+
+def test_paragraph_wraps_to_terminal_width(monkeypatch) -> None:
+    monkeypatch.setenv("COLUMNS", "40")
+    monkeypatch.setenv("LINES", "24")
+    term = plain_term()
+    rendered = loom_ui.paragraph(
+        term,
+        "Bring a Brightspace course export or an unpacked export folder.",
+    )
+    assert len(rendered.splitlines()) > 1
+    assert all(
+        line.startswith("  ") and len(line) <= 40
+        for line in rendered.splitlines()
+    )
+
+
 def test_back_hint_appears_only_when_allowed(monkeypatch, capsys) -> None:
     term = plain_term()
     prompts: list[str] = []

@@ -81,7 +81,7 @@ def trail(term: loom_ui.Term, current: str) -> str:
 
 
 def guidance(term: loom_ui.Term, text: str) -> None:
-    print("  " + term.dim(text))
+    print(loom_ui.paragraph(term, text, dim=True))
 
 
 def relative_display(path: Path) -> str:
@@ -695,10 +695,12 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
             return FIXTURE
         if choice == "path":
             while True:
+                print()
                 guidance(
                     term,
                     "Tip: drag the file into this window to paste its full path.",
                 )
+                print()
                 raw = loom_ui.prompt_text(
                     term,
                     "Completed rubric path",
@@ -1200,11 +1202,13 @@ def run_interactive(
         args.allow_equal_weights = explicit_equal_weights
         print(loom_ui.heading(term, "The source", "1 of 4"))
         print(trail(term, "source"))
+        print()
         guidance(
             term,
             "Choose a completed Word, Markdown, or JSON rubric. This step is "
             "read-only.",
         )
+        print()
         if source is None:
             picked = pick_source(term, str(state.get("source", "")))
             if picked is TEMPLATE_HANDOFF:

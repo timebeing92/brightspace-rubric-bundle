@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import textwrap
 import time
 
 
@@ -279,6 +280,20 @@ def prompt_text(
     return reply or default
 
 
+def paragraph(term: Term, text: str, *, dim: bool = False) -> str:
+    """Wrap an indented prose block to the current terminal width."""
+    indent = "  "
+    lines = textwrap.wrap(
+        text,
+        width=max(24, term.width - len(indent)),
+        break_long_words=False,
+        break_on_hyphens=False,
+    ) or [""]
+    if dim:
+        lines = [term.dim(line) for line in lines]
+    return "\n".join(indent + line for line in lines)
+
+
 def confirm(
     term: Term,
     prompt: str,
@@ -317,10 +332,12 @@ def choose(
 ):
     """Numbered single-choice menu; returns the chosen option key."""
     print(f"  {term.accent('?')} {prompt}")
+    print()
     keys = [key for key, _ in options]
     for index, (key, label) in enumerate(options, start=1):
         marker = term.secondary(" (default)") if key == default else ""
         print(f"      {term.bold(str(index))}. {label}{marker}")
+    print()
     hint = f"    choice [{keys.index(default) + 1}]"
     if allow_back:
         hint += " (b = back)"
