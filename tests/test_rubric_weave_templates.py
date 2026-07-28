@@ -56,7 +56,7 @@ def test_manifest_records_exact_version_media_path_bytes_and_sha256() -> None:
     assert manifest["path_base"] == "manifest_directory"
     assert manifest["accepted_producer"] == {
         "repository": "coursecraft_workbench",
-        "commit": "7c5140545548c89a254ac4502cfdd7ee6fb44255",
+        "commit": "71552e912b79d73a00b4d70fd97bd32386fbe2a4",
         "authoring_contract": "coursecraft.rubric_authoring/1",
     }
 

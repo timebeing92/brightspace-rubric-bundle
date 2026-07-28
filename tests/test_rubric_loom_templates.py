@@ -24,7 +24,7 @@ import rubric_loom_templates as templates  # noqa: E402
 EXPECTED = {
     "rubric-weave-intake-template.docx": (
         36204,
-        "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c",
+        "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ),
     "rubric-weave-intake-template.md": (
@@ -67,10 +67,10 @@ def template_root(tmp_path: Path) -> Path:
 
 def test_catalog_reports_only_exact_release_pinned_assets() -> None:
     catalog = templates.load_catalog()
-    assert catalog.source_commit == "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+    assert catalog.source_commit == "60d81c9ce7d4518111443d03cf854b584644c3cc"
     assert (
         catalog.accepted_producer_commit
-        == "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+        == "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
     )
     assert [asset.name for asset in catalog.assets] == list(EXPECTED)
     for asset in catalog.assets:

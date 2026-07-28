@@ -2675,13 +2675,13 @@ def _producer_identity() -> dict[str, Any]:
 
     repo_root = Path(__file__).resolve().parents[1]
 
-    def git(*args: str) -> str:
+    def git(*args: str, check: bool = True) -> str:
         result = subprocess.run(
             ["git", *args],
             cwd=repo_root,
             text=True,
             capture_output=True,
-            check=True,
+            check=check,
         )
         return result.stdout.strip()
 
@@ -2699,7 +2699,13 @@ def _producer_identity() -> dict[str, Any]:
     }
     try:
         commit = git("rev-parse", "HEAD")
-        ref = git("symbolic-ref", "--quiet", "--short", "HEAD") or None
+        ref = git(
+            "symbolic-ref",
+            "--quiet",
+            "--short",
+            "HEAD",
+            check=False,
+        ) or None
         dirty = bool(git("status", "--porcelain", "--untracked-files=normal"))
     except (OSError, subprocess.CalledProcessError):
         return {

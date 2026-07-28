@@ -1,7 +1,7 @@
 {
   "accepted_producer": {
     "authoring_contract": "coursecraft.rubric_authoring/1",
-    "commit": "7c5140545548c89a254ac4502cfdd7ee6fb44255",
+    "commit": "71552e912b79d73a00b4d70fd97bd32386fbe2a4",
     "repository": "coursecraft_workbench"
   },
   "boundaries": {
@@ -17,7 +17,7 @@
       "bytes": 36204,
       "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "path": "rubric-weave-intake-template.docx",
-      "sha256": "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c",
+      "sha256": "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6",
       "version": "v1"
     },
     {

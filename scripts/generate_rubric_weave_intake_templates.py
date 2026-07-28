@@ -2,7 +2,7 @@
 """Generate the versioned Rubric Weave intake templates deterministically.
 
 The templates are presentation assets over the accepted Workbench producer at
-``7c5140545548c89a254ac4502cfdd7ee6fb44255``.  This generator does not parse,
+``71552e912b79d73a00b4d70fd97bd32386fbe2a4``.  This generator does not parse,
 normalize, score, or package rubrics; those semantics remain in
 ``rubric_authoring.py`` and ``make_rubric_package.py``.
 """
@@ -35,7 +35,7 @@ DEFAULT_OUTPUT_DIR = (
 
 TEMPLATE_VERSION = "v1"
 TEMPLATE_SET = "rubric-weave-intake"
-ACCEPTED_PRODUCER_COMMIT = "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+ACCEPTED_PRODUCER_COMMIT = "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
 AUTHORING_CONTRACT = "coursecraft.rubric_authoring/1"
 DOCX_NAME = "rubric-weave-intake-template.docx"
 MARKDOWN_NAME = "rubric-weave-intake-template.md"

@@ -26,14 +26,16 @@ the product name is deliberately distinct from the repo name.
 
 The mechanical distribution surface is byte-pinned from
 `coursecraft_workbench` commit
-`ad08b1ca1ebd0889bba3353cd87ca71b88f26514` (2026-07-25). The accepted
-producer semantics remain commit
-`7c5140545548c89a254ac4502cfdd7ee6fb44255`; the later ref adds deterministic
-intake templates and evidence without changing producer bytes. Both identities
-and all 36 file digests are in `upstream/workbench_pin.json`. Every source is
-canonical, not a generated-lane prototype. `coursecraft.progress/1` and
-template discovery/delivery are bundle-owned composition and are released
-separately from Workbench semantics.
+`60d81c9ce7d4518111443d03cf854b584644c3cc` (2026-07-28). The accepted
+producer identity and semantics are commit
+`71552e912b79d73a00b4d70fd97bd32386fbe2a4`; it preserves commit provenance
+when GitHub runs from a detached `HEAD` without changing rubric normalization,
+scoring, XML construction, or package structure. The later distribution ref
+records that acceptance in the deterministic intake-template assets. Both
+identities and all 36 file digests are in `upstream/workbench_pin.json`.
+Every source is canonical, not a generated-lane prototype.
+`coursecraft.progress/1` and template discovery/delivery are bundle-owned
+composition and are released separately from Workbench semantics.
 
 ## Included now
 

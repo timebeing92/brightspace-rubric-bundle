@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PIN_PATH = REPO_ROOT / "upstream" / "workbench_pin.json"
 PIN_SCHEMA = "coursecraft.workbench_vendor_pin/1"
 SOURCE_REMOTE = "https://github.com/timebeing92/coursecraft-workbench.git"
-ACCEPTED_PRODUCER_COMMIT = "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+ACCEPTED_PRODUCER_COMMIT = "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
 
 SOURCE_FILES = (
     "scripts/build_rubric_package.py",

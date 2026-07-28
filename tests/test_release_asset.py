@@ -241,10 +241,10 @@ def test_weave_capability_is_independent_and_exact() -> None:
     assert capability["exit_codes"] == release.WEAVE_EXIT_CODES
     assert capability["activity_attachment"] == "manual_only"
     assert capability["producer_pin"]["source_commit"] == (
-        "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+        "60d81c9ce7d4518111443d03cf854b584644c3cc"
     )
     assert capability["producer_pin"]["accepted_producer_commit"] == (
-        "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+        "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
     )
     assert capability["source_byte_binding"] == {
         "primary": "source.sha256",
@@ -257,15 +257,15 @@ def test_weave_capability_is_independent_and_exact() -> None:
     template_catalog = capability["templates"]
     assert template_catalog["status"] == "available"
     assert template_catalog["source_commit"] == (
-        "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+        "60d81c9ce7d4518111443d03cf854b584644c3cc"
     )
     assert template_catalog["accepted_producer_commit"] == (
-        "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+        "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
     )
     templates = {item["name"]: item for item in template_catalog["templates"]}
     assert templates["rubric-weave-intake-template.docx"]["bytes"] == 36204
     assert templates["rubric-weave-intake-template.docx"]["sha256"] == (
-        "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c"
+        "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6"
     )
     assert templates["rubric-weave-intake-template.md"]["bytes"] == 2410
     assert templates["rubric-weave-intake-template.md"]["media_type"] == "text/markdown"
@@ -324,7 +324,7 @@ def test_sbom_is_deterministic_and_lock_grounded(scratch_bundle: Path) -> None:
         (
             "rubric-weave-intake-template.docx",
             36204,
-            "349a2c3d1f68b01476bc271be7e1e3f7c303edbc98739eac3d1eee8aafce104c",
+            "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6",
         ),
         (
             "rubric-weave-intake-template.md",

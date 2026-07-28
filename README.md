@@ -140,9 +140,9 @@ extraction and build semantics, and live-import evidence. This repo contains
 byte-pinned downstream copies of the portable producer files; the pin and
 every promoted file digest are recorded in `upstream/workbench_pin.json`.
 The current mechanical distribution ref is Workbench
-`ad08b1ca1ebd0889bba3353cd87ca71b88f26514`; its producer files retain the
-accepted semantics at
-`7c5140545548c89a254ac4502cfdd7ee6fb44255`.
+`60d81c9ce7d4518111443d03cf854b584644c3cc`; its producer files retain the
+accepted semantics and repaired detached-HEAD provenance behavior at
+`71552e912b79d73a00b4d70fd97bd32386fbe2a4`.
 The rubric extraction scripts also ship inside `brightspace-blueprint-bundle`
 as part of full blueprint runs; both downstream copies trace to the same
 Workbench source, and fixes land upstream first.
@@ -172,8 +172,9 @@ names survive the loop. The receipt lands in
 
 Or double-click `launch_rubric_loom.command` (macOS). On a fresh machine it
 offers to build the `.venv`, then opens the Loom artwork and the explicit
-**Unravel** / **Weave** landing page. Each door offers its own synthetic
-demonstration from the source chooser.
+**Unravel** / **Weave** landing page. Unravel places its synthetic
+demonstration beside the early Single/Bulk choice; Weave keeps its
+demonstration in its source chooser.
 
 Unravel retains its export peek and review artifacts, and offers single or
 bulk processing after the door is selected. Weave invokes producer preflight,
@@ -229,8 +230,8 @@ Weave capability and SBOM.
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Working; immutable v1.2.0 remains published from `6c1af0a…`; deterministic v1.2.1 provenance repair is published from `ee61bbf…` with archive SHA-256 `8b739638…` |
-| Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `ad08b1c…`; accepted producer semantics remain `7c51405…` |
+| `scripts/make_release_asset.py` (release machinery) | Current release line: v1.3.0; an annotated version tag now triggers pin verification, the complete test suite, deterministic asset construction, checksum verification, retained workflow artifacts, and GitHub release publication |
+| Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `60d81c9…`; accepted producer identity and semantics are `71552e9…` |
 | `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, exact source-byte binding, six progress steps, validated outputs, and a final receipt whose bundle commit comes from the exact repository root or immutable release manifest—never an ambient parent checkout |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
 | Terminal Rubric Wizard | Working two-door surface; integrity-gated template list/copy, producer preflight, named Weave approval, exact source snapshot, receipt-grounded results, plain/headless mode, one macOS launcher |

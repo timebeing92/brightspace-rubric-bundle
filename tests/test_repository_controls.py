@@ -22,10 +22,10 @@ def run_script(*args: str) -> subprocess.CompletedProcess[str]:
 def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     pin = json.loads((REPO_ROOT / "upstream" / "workbench_pin.json").read_text())
     assert pin["schema"] == "coursecraft.workbench_vendor_pin/1"
-    assert pin["source_commit"] == "ad08b1ca1ebd0889bba3353cd87ca71b88f26514"
+    assert pin["source_commit"] == "60d81c9ce7d4518111443d03cf854b584644c3cc"
     assert (
         pin["accepted_producer_commit"]
-        == "7c5140545548c89a254ac4502cfdd7ee6fb44255"
+        == "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
     )
     sources = [entry["source"] for entry in pin["files"]]
     targets = [entry["target"] for entry in pin["files"]]
@@ -36,8 +36,35 @@ def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_release_candidate_version_is_1_2_1() -> None:
-    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.2.1\n"
+def test_release_candidate_version_is_1_3_0() -> None:
+    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.0\n"
+
+
+def test_tag_release_workflow_is_guarded_and_publishes_both_assets() -> None:
+    workflow = (
+        REPO_ROOT / ".github" / "workflows" / "release.yml"
+    ).read_text(encoding="utf-8")
+    for marker in (
+        'tags:',
+        '- "v*"',
+        "contents: write",
+        'git cat-file -t "$GITHUB_REF_NAME"',
+        'test "$GITHUB_REF_NAME" = "v$version"',
+        'docs/releases/$GITHUB_REF_NAME.md',
+        "python scripts/vendor_from_workbench.py --check",
+        "python -m pytest",
+        'python scripts/make_release_asset.py --ref "$GITHUB_REF_NAME"',
+        "sha256sum -c *.sha256",
+        "actions/upload-artifact@v6",
+        "dist/*.tar.gz",
+        "dist/*.sha256",
+        'gh release create "$GITHUB_REF_NAME"',
+        "--verify-tag",
+    ):
+        assert marker in workflow
+
+    release_notes = REPO_ROOT / "docs" / "releases" / "v1.3.0.md"
+    assert release_notes.is_file()
 
 
 def test_pin_covers_both_doors_and_the_contracts() -> None:

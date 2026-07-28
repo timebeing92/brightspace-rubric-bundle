@@ -317,7 +317,7 @@ def test_guided_bulk_unravel_runs_zip_and_unpacked_folder(
     )
     session.wait_for(b"What do you want to do?")
     session.send(b"1\r")
-    session.wait_for(b"How many course exports do you want to unravel?")
+    session.wait_for(b"How would you like to begin?")
     session.send(b"2\r")
     session.wait_for(b"Folder containing the course exports")
     session.send(str(batch).encode() + b"\r")
@@ -331,6 +331,8 @@ def test_guided_bulk_unravel_runs_zip_and_unpacked_folder(
     session.wait_for_count(b"Start Bulk Unravel?", 2)
     session.send(b"\r")
     session.wait_for(b"Bulk Unravel summary", timeout=30.0)
+    session.wait_for(b"Open the folder containing these files?")
+    session.send(b"n\r")
     code = session.finish(timeout=30.0)
 
     assert code == 0
@@ -370,19 +372,21 @@ def test_guided_bulk_refuses_colliding_labels_before_any_write(
         ],
         state=tmp_path / "state.json",
     )
-    session.wait_for(b"How many course exports do you want to unravel?")
+    session.wait_for_count(b"How would you like to begin?", 1)
     session.send(b"2\r")
     session.wait_for(b"Folder containing the course exports")
     session.send(str(batch).encode() + b"\r")
     session.wait_for(b"Bulk output names collide")
     session.wait_for_count(b"Folder containing the course exports", 2)
     session.send(b"b\r")
+    session.wait_for_count(b"How would you like to begin?", 2)
+    session.send(b"e\r")
     assert session.finish() == 0
     assert not output.exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
-def test_guided_single_mode_still_reaches_the_original_source_chooser(
+def test_guided_single_source_back_returns_to_the_unravel_choices(
     tmp_path: Path,
 ) -> None:
     from test_rubric_loom_wizard import PtyWizard
@@ -390,12 +394,36 @@ def test_guided_single_mode_still_reaches_the_original_source_chooser(
     session = PtyWizard(["--brisk"], state=tmp_path / "state.json")
     session.wait_for(b"What do you want to do?")
     session.send(b"1\r")
-    session.wait_for(b"How many course exports do you want to unravel?")
+    session.wait_for_count(b"How would you like to begin?", 1)
     session.send(b"1\r")
-    session.wait_for(b"Where is the course export you want to read?")
-    session.send(b"q\r")
+    session.wait_for(b"Course export path")
+    session.send(b"b\r")
+    session.wait_for_count(b"How would you like to begin?", 2)
+    session.send(b"e\r")
     assert session.finish() == 0
     assert b"nothing was run." in session.stream
+    assert b"Where is the course export you want to read?" not in session.stream
+    assert b"Enter or drag a different file or folder path" not in session.stream
+
+
+@pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
+def test_demonstration_is_an_early_choice_not_a_source_prompt_shortcut(
+    tmp_path: Path,
+) -> None:
+    from test_rubric_loom_wizard import PtyWizard
+
+    session = PtyWizard(["--brisk"], state=tmp_path / "state.json")
+    session.wait_for(b"What do you want to do?")
+    session.send(b"1\r")
+    session.wait_for(b"THE DEMONSTRATION")
+    session.send(b"3\r")
+    session.wait_for(b"Course export check")
+    session.wait_for(b"Start Unravel?")
+    session.send(b"q\r")
+
+    assert session.finish() == 0
+    assert b"nothing was run." in session.stream
+    assert b"Course export path" not in session.stream
 
 
 @pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
@@ -407,7 +435,7 @@ def test_unravel_mode_back_returns_to_the_two_door_landing(
     session = PtyWizard(["--brisk"], state=tmp_path / "state.json")
     session.wait_for_count(b"What do you want to do?", 1)
     session.send(b"1\r")
-    session.wait_for(b"How many course exports do you want to unravel?")
+    session.wait_for(b"How would you like to begin?")
     session.send(b"b\r")
     session.wait_for_count(b"What do you want to do?", 2)
     session.send(b"q\r")
