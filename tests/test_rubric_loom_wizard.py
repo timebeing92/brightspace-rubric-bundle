@@ -712,7 +712,8 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
         ["--source", str(FIXTURE), "--output-dir", str(out_dir)],
         state=tmp_path / "state.json",
     )
-    session.wait_for(b"R U B R I C   L O O M")
+    session.wait_for(b"R U B R I C")
+    session.wait_for(b"L O O M")
     session.wait_for(b"Ready to unravel")
     session.wait_for(b"tiny_rubrics_export__rubrics.docx")
     session.wait_for(b"Start Unravel?")
@@ -737,7 +738,8 @@ def test_pty_guided_journey_reaches_the_bound_cloth(tmp_path: Path) -> None:
 @pytestmark_pty
 def test_pty_landing_q_leaves_without_running(tmp_path: Path) -> None:
     session = PtyWizard([], state=tmp_path / "state.json")
-    session.wait_for(b"R U B R I C   L O O M")
+    session.wait_for(b"R U B R I C")
+    session.wait_for(b"L O O M")
     session.wait_for(b"Choose what you want to do")
     session.wait_for(b"UNRAVEL")
     session.wait_for(b"WEAVE")
@@ -747,8 +749,8 @@ def test_pty_landing_q_leaves_without_running(tmp_path: Path) -> None:
     assert code == 0
     assert b"nothing was run." in session.stream
     assert b"Python interpreter" not in session.stream
-    assert b"\x1b[38;5;137m" in session.stream  # wood frame in the Loom art
-    assert session.stream.index(b"R U B R I C   L O O M") < session.stream.index(
+    assert b"\x1b[38;5;97m" in session.stream  # violet frame in the Loom art
+    assert session.stream.index(b"R U B R I C") < session.stream.index(
         b"Choose what you want to do"
     )
 

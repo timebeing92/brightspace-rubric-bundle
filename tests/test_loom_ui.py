@@ -78,6 +78,22 @@ def test_banner_plain_is_a_single_plain_line(capsys) -> None:
     assert "\x1b" not in captured.out
 
 
+def test_tui_art_matches_the_workshop_loom_palette() -> None:
+    assert loom_art.PALETTE == {
+        "F": 97,
+        "f": 97,
+        "W": 183,
+        "T": 31,
+        "S": 222,
+        "s": 97,
+        "C": 183,
+        "c": 31,
+        "*": 222,
+        "!": 222,
+    }
+    assert loom_art.TITLE == "R U B R I C      L O O M"
+
+
 def test_card_wraps_long_rows_without_shattering_borders(monkeypatch) -> None:
     """A long path row must never push the right border off the box: the
     card wraps it onto continuation rows, character-exactly."""

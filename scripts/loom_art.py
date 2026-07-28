@@ -51,19 +51,22 @@ SCENE = [
 # No pixel uses the UI accent index (loom_ui.ACCENT = 168): the accent is
 # reserved for prompts even here, matching the family art's discipline.
 PALETTE = {
-    "F": 137,  # loom frame wood
-    "f": 94,   # frame legs / shadow
-    "W": 187,  # warp threads (undyed)
-    "T": 211,  # weft thread just laid (rose)
-    "S": 179,  # shuttle body
-    "s": 137,  # shuttle tips
-    "C": 175,  # woven cloth (rose, deliberately off-accent)
-    "c": 132,  # cloth weave shadow
-    "*": 222,  # sparks
-    "!": 230,  # sparkle at the shuttle tip (animation only)
+    "F": 97,   # frame violet — web #875faf
+    "f": 97,   # frame legs
+    "W": 183,  # thread lavender — nearest xterm match to web #d7a0ff
+    "T": 31,   # cyan weft — web #0087af
+    "S": 222,  # gold shuttle — web #ffd787
+    "s": 97,   # violet shuttle tips
+    "C": 183,  # lavender cloth
+    "c": 31,   # cyan cloth
+    "*": 222,  # gold sparks
+    "!": 222,  # gold sparkle at the shuttle tip (animation only)
 }
 
-TITLE = "R U B R I C   L O O M"
+TITLE_LEFT = "R U B R I C"
+TITLE_RIGHT = "L O O M"
+TITLE_GAP = "      "
+TITLE = TITLE_LEFT + TITLE_GAP + TITLE_RIGHT
 SUBTITLE = "Unravel exports  ·  Weave rubric-only import packages"
 
 # The shuttle's row and resting position in SCENE (used by the animation).
@@ -74,12 +77,21 @@ WARP_START = 4         # first interior column between the posts
 WARP_END = 39          # last interior column
 
 
+def _colored_title(term) -> str:
+    """Two visibly separate words; Loom carries the web artwork's violet."""
+    return (
+        term.bold(TITLE_LEFT)
+        + TITLE_GAP
+        + term.fg(PALETTE["F"], TITLE_RIGHT, bold=True)
+    )
+
+
 def banner(term) -> None:
     """Static one-line banner for --brisk, --plain, and non-interactive runs."""
     if term.plain:
         print("RUBRIC LOOM")
         return
-    print("  " + term.bold(TITLE) + "  " + term.dim("· " + SUBTITLE))
+    print("  " + _colored_title(term) + "  " + term.dim("· " + SUBTITLE))
 
 
 def _grid() -> list[list[str]]:
@@ -143,7 +155,7 @@ def _shuttle_frame(grid: list[list[str]], pos: int) -> None:
 
 def splash(term, *, animate: bool = True, version: str = "") -> None:
     """Draw the loom. Animated on a TTY: the shuttle lays one pick of weft."""
-    title_line = f"  {term.bold(TITLE)}"
+    title_line = f"  {_colored_title(term)}"
     subtitle_line = "  " + term.dim(SUBTITLE + (f"  ·  {version}" if version else ""))
 
     if term.plain:
