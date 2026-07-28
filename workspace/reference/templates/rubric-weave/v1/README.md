@@ -10,7 +10,7 @@ Both files contain the same synthetic rubric: three editable performance
 levels, three editable criterion rows, one numeric score in every level
 header, and explicit positive weights totaling 100. They are presentation
 assets over the accepted producer at
-`7c5140545548c89a254ac4502cfdd7ee6fb44255`; they do not add a parser or alter
+`71552e912b79d73a00b4d70fd97bd32386fbe2a4`; they do not add a parser or alter
 `coursecraft.rubric_authoring/1`.
 
 ## Choose and edit a template

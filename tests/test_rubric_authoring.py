@@ -165,6 +165,31 @@ def test_build_is_deterministic_minimal_and_receipted(tmp_path: Path) -> None:
     ])
 
 
+def test_producer_identity_preserves_commit_in_detached_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_run = subprocess.run
+
+    def run_with_detached_head(command: list[str], *args, **kwargs):
+        if command[:2] == ["git", "symbolic-ref"]:
+            return subprocess.CompletedProcess(
+                command,
+                returncode=1,
+                stdout="",
+                stderr="fatal: ref HEAD is not a symbolic ref\n",
+            )
+        return original_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(rubric_authoring.subprocess, "run", run_with_detached_head)
+
+    identity = rubric_authoring._producer_identity()
+
+    assert identity["identity_state"] == "git"
+    assert len(identity["commit"]) == 40
+    assert identity["ref"] is None
+    assert isinstance(identity["dirty"], bool)
+
+
 def test_variable_levels_and_descriptions_survive_semantic_roundtrip(tmp_path: Path) -> None:
     result = build_weave_outputs(
         FIXTURES / "three_level_explicit.md",
