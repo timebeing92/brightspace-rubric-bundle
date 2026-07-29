@@ -553,6 +553,55 @@ def test_ordinary_environment_check_is_quiet_when_ready(capsys) -> None:
     assert capsys.readouterr().out == ""
 
 
+def test_guided_open_checks_environment_before_asking_for_a_door(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import rubric_loom_wizard as wizard
+
+    events: list[str] = []
+    monkeypatch.setattr(wizard.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(wizard.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(
+        wizard.loom_art,
+        "banner",
+        lambda term: events.append("banner"),
+    )
+    monkeypatch.setattr(
+        wizard,
+        "ensure_environment",
+        lambda term, *, assume_yes: (
+            events.append("environment") or True,
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        wizard,
+        "choose_door",
+        lambda term, state: events.append("door") or "q",
+    )
+    monkeypatch.setattr(wizard, "load_state", lambda: {})
+
+    result = wizard.main(["--plain", "--brisk", "--no-update-check"])
+
+    assert result == 0
+    assert events == ["banner", "environment", "door"]
+
+
+def test_door_card_states_the_deterministic_local_python_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    monkeypatch.setattr(loom_ui, "choose", lambda *args, **kwargs: "q")
+
+    assert wizard.choose_door(loom_ui.Term(plain=True), {}) == "q"
+    output = capsys.readouterr().out
+    assert "Purely deterministic software, running locally in Python." in output
+    assert "No AI model reads or interprets your files." in output
+
+
 def test_missing_dependencies_offer_one_locked_local_repair(
     monkeypatch: pytest.MonkeyPatch,
     capsys,

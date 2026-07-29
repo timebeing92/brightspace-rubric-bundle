@@ -29,12 +29,13 @@ infers no artifacts.
 
 ## Landing and guided terminal flow
 
-The normal terminal opens with the color Loom artwork and two explicit
-choices: **UNRAVEL** or **WEAVE**. There is no launcher menu and no doctor
-screen in front of those choices. Setup checks run quietly after the choice;
-if a required package is missing, the Loom offers to install the pinned
-runtime dependencies into its local `.venv`. The complete diagnostic
-checklist remains available through `--doctor`.
+The normal terminal opens with the color Loom artwork, quietly checks its
+environment, and then presents two explicit choices: **UNRAVEL** or
+**WEAVE**. There is no launcher menu and no doctor screen in front of those
+choices. If a required package is missing, the Loom offers to install the
+pinned runtime dependencies into its local `.venv` before asking the user to
+choose a door or provide a path. The complete diagnostic checklist remains
+available through `--doctor`.
 
 After setup is known to be usable, the guided TUI performs a cached,
 non-blocking check for the latest published GitHub release. It checks at most

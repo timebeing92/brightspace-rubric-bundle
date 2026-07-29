@@ -6,137 +6,223 @@
        width="620">
 </p>
 
-Rubric Loom is a guided local tool for people who need to inspect, revise, or
-move Brightspace rubrics without hand-editing D2L XML. It runs on your
-computer and opens through one of two doors:
+Rubric Loom helps you inspect, revise, and move Brightspace rubrics without
+hand-editing D2L XML. It is purely deterministic software, running locally in
+Python. No AI model reads or interprets your files, and your files are not
+uploaded anywhere.
 
-| Door | Bring | Take away |
+The Loom has two doors:
+
+| Choose | Bring | Take away |
 | --- | --- | --- |
-| **Unravel** | A Brightspace course-export ZIP, an unpacked export folder, or a bare `rubrics_d2l.xml` | A review workbook, structured rubric JSON, and a reviewer DOCX |
-| **Weave** | A completed rubric in a supported DOCX table, Markdown table, or JSON format | Producer preflight followed by a validated, rubric-only Brightspace import package and its review/receipt companions |
+| **Unravel** | One Brightspace course-export ZIP, one unpacked export folder, a bare `rubrics_d2l.xml`, or a folder containing several exports | A review DOCX, editing workbook, and structured JSON for each course |
+| **Weave** | A completed rubric in a supported Word, Markdown, or JSON format | A validated, rubric-only Brightspace import ZIP, with review files and a run receipt |
 
-After choosing Unravel, you can read one export or select **Bulk Unravel** and
-point the Loom to a parent folder. Bulk Unravel inventories the folder's
-immediate course-export ZIPs and unpacked export folders, reviews the batch
-once, and gives every course its own output folder and run log.
+Rubric Loom does not change Brightspace. You review every output. If you build
+a Weave package, you import it yourself and manually attach the imported rubric
+to the appropriate assignment, discussion, or quiz.
 
-Rubric Loom has no AI component. It is deterministic, rules-based Python
-software that reads and writes against known Brightspace/D2L package
-structures. Processing stays on your computer, and the Loom does not change
-Brightspace: you review every output, import a Weave package yourself, and
-attach imported rubrics to activities manually.
+## Download the ready-to-run Loom
 
-## Download Rubric Loom
+Most people should use the
+[`brightspace-rubric-loom-runner` Releases page](https://github.com/timebeing92/brightspace-rubric-loom-runner/releases).
 
-For the one-download local application, use the
-[`brightspace-rubric-loom-runner` Releases page](https://github.com/timebeing92/brightspace-rubric-loom-runner/releases)
-and download `rubric-loom-managed-v<VERSION>.zip`. That package contains this
-engine and the exact runner version tested with it, plus double-click launchers,
-private-environment setup, verified updates, and rollback.
+1. Open the newest release.
+2. Under **Assets**, download `rubric-loom-managed-v<VERSION>.zip`.
+3. Unzip it somewhere you can keep it, such as Documents or Applications.
+4. Open the launcher for your operating system.
 
-Do not use GitHub’s green **Code > Download ZIP** button for an ordinary
-installation. That source-code ZIP contains only one repository. The runner’s
-managed release is the supported colleague-facing download.
+Do not use GitHub's green **Code > Download ZIP** button for an ordinary
+installation. That button downloads one source repository, not the complete,
+managed application. The managed release includes this engine, a compatible
+runner, double-click launchers, private-environment setup, verified updates,
+and rollback.
 
-This repository remains the technical producer for the CourseCraft Workshop,
-headless integrations, source review, and bundle development.
+## First launch
 
-## Run the bundle directly
+Rubric Loom checks its Python environment and required packages as soon as it
+opens—before it asks you to choose Unravel or Weave, and before it asks for a
+file or folder path. If setup is needed, the launcher explains what is missing
+and offers to install the pinned dependencies into the Loom's own private
+environment. It does not install packages into your system Python.
 
-**On macOS:** clone this repository, then double-click
-`launch_rubric_loom.command`. The launcher checks for Python 3.11–3.13 and,
-on the first run, offers to create a local `.venv` inside this folder. It
-then opens the Loom artwork and the two choices directly: **Unravel** or
-**Weave**.
+### macOS
 
-**From a terminal:** use any installed Python 3.11, 3.12, or 3.13:
+Open `Rubric Loom.command`.
+
+macOS may block the launcher the first time because the release is not signed
+through Apple's App Store or notarization service. If that happens:
+
+1. Try to open `Rubric Loom.command` once, then dismiss the warning.
+2. Open **System Settings > Privacy & Security**.
+3. Scroll to **Security** and choose **Open Anyway** for Rubric Loom.
+4. Authenticate with your password or Touch ID, then confirm **Open**.
+
+Apple normally shows **Open Anyway** for about an hour after the blocked launch.
+Use this exception only for the release you downloaded from this project's
+GitHub page. See
+[Apple's current instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
+
+### Windows
+
+Open `Rubric Loom.bat`. If Windows shows a security or reputation prompt,
+review that the file came from the project's GitHub release before choosing to
+run it.
+
+### Linux
+
+Open a terminal in the unzipped folder and run:
 
 ```bash
-python3.13 scripts/bootstrap_env.py
+bash rubric_loom_launcher.sh
+```
+
+## Choose a door
+
+The landing screen makes the two jobs explicit.
+
+### Unravel: read rubrics from Brightspace exports
+
+Choose **Unravel** when the rubric already exists in Brightspace.
+
+1. Choose **Single Unravel**, **Bulk Unravel**, or the built-in demonstration.
+2. Drag in or type the path to your source.
+3. Review what the Loom found and the filenames it proposes.
+4. Press Return to accept the recommendations, or change only the numbered
+   item that needs adjustment.
+5. Run Unravel and review the success card.
+
+A single source may be a course-export ZIP, an unpacked export folder, or a
+bare `rubrics_d2l.xml`. Bulk Unravel accepts a parent folder whose immediate
+contents are course-export ZIPs or unpacked export folders. It inventories the
+batch once, then gives every course its own output folder and run log. One
+failed or rubric-free export does not conceal the remaining results.
+
+The result card reports how many rubrics were pulled, names each rubric, and
+offers to open the containing folder.
+
+### Weave: build a rubric-only import package
+
+Choose **Weave** when you have a completed rubric that needs to become a
+Brightspace package.
+
+1. Select a supported Word, Markdown, or JSON rubric, try the demonstration,
+   or copy a release-pinned intake template.
+2. Read the producer preflight: rubric structure, level labels, scoring
+   evidence, weights, and diagnostics.
+3. Correct missing information in the source, or explicitly approve only a
+   fallback the producer permits.
+4. Review the proposed output folder and exact filenames.
+5. Type `WEAVE` to authorize the build.
+6. Review the validated import ZIP and its review and receipt files.
+
+Weave never invents scoring silently. Its final receipt binds the package to
+the exact source bytes you reviewed. A successful build is not an import:
+import the ZIP yourself, then attach the rubric to activities manually in
+Brightspace.
+
+## What the software reads
+
+A Brightspace course export is an ordinary ZIP file. Inside it,
+`imsmanifest.xml` maps the package resources and course structure. D2L XML
+files carry component-specific details; Rubric Loom works against the known
+`rubrics_d2l.xml` structure and the Brightspace rubric dialect with
+`schemaversion` v2011.
+
+Each run follows declared schemas and explicit rules. The same source meets
+the same checks every time. When a file does not match a supported structure,
+the Loom reports that mismatch instead of guessing. Course exports contain
+course content and structure, not learner records, but you should still handle
+institutional course material according to your organization's policies.
+
+## What Rubric Loom does not do
+
+- It does not use AI or ask an LLM to interpret course material.
+- It does not upload your source files.
+- It does not import anything into Brightspace.
+- It does not attach imported rubrics to activities.
+- It does not silently invent rubric labels, levels, scoring, or weights.
+- It does not replace human review.
+
+## Updates, demonstrations, and user files
+
+The guided Loom checks GitHub at most once per day for a newer published
+release. Current, offline, and failed checks stay quiet. When an update exists,
+the Loom can open the release page, but it never downloads or installs an
+update automatically.
+
+Each door includes a synthetic demonstration containing no course, learner, or
+institutional data.
+
+The managed runner keeps replaceable program versions separate from persistent
+inputs, outputs, settings, and logs. See the runner README for its update and
+rollback behavior.
+
+## Run this producer repository directly
+
+This repository is the technical producer used by the managed runner, the
+CourseCraft Workshop, and headless integrations. Developers and reviewers can
+clone it and run the bundle directly.
+
+On macOS, double-click `launch_rubric_loom.command`. From a terminal, use
+Python 3.11, 3.12, or 3.13:
+
+```bash
+python3.13 scripts/bootstrap_env.py --locked
 .venv/bin/python scripts/rubric_loom_wizard.py
 ```
 
-Substitute `python3.11` or `python3.12` when that is the supported Python on
-your machine.
+Substitute `python3.11` or `python3.12` when appropriate. The verbose
+diagnostic checklist remains available separately:
 
-The terminal guide chooses sensible file and folder names after it reads your
-source. Before anything is written, one review card shows the source, exact
-filenames, save folder, and relevant review options. Press Return to use the
-recommendations, or enter the number of the one item you want to change.
-Bulk Unravel shows one inventory and destination review before running each
-export in sequence; one failed or rubric-free export does not conceal the
-remaining results. Weave also shows its producer preflight and requires the
-final named approval `WEAVE`.
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py --doctor
+```
 
-Environment checks are automatic and quiet when everything is ready. If a
-required Python package is missing, the Loom explains what it needs and
-offers to install the pinned dependencies into its local `.venv`. The full
-diagnostic checklist remains available with
-`.venv/bin/python scripts/rubric_loom_wizard.py --doctor`.
-
-Managed runners can keep replaceable program files separate from persistent
-work by setting `RUBRIC_LOOM_USER_DATA` to the data root and
-`RUBRIC_LOOM_VENV` to the private environment directory. With no overrides,
-the standalone bundle retains its existing repository-local behavior.
-
-The guided TUI also checks GitHub for a newer published Rubric Loom release
-at most once per day. Current, offline, and failed checks stay quiet. When a
-newer release exists, the Loom shows the installed and available versions and
-can open the release page; it never installs an update automatically. Use
-`--check-for-updates` for an explicit check or `--no-update-check` to skip the
-automatic check.
-
-Want to look around before using your own files? Each door’s source chooser
-includes a synthetic demonstration. The examples contain no course, learner,
-or institutional data.
-
-For detailed terminal and headless options, see
+For the complete guided and headless command reference, see
 [`docs/RUBRIC_LOOM_WIZARD.md`](docs/RUBRIC_LOOM_WIZARD.md).
 
-## Technical overview
+## Headless use
 
-This repository is the portable producer for **Rubric Loom**: one rubric
-service with two doors that converge on the Brightspace rubric dialect
-(`rubrics_d2l.xml`, schemaversion v2011).
+Unravel one export:
 
-- **Unravel**: a Brightspace course export, an unpacked export
-  folder, or a bare `rubrics_d2l.xml` becomes a review workbook, a
-  `coursecraft.rubrics/1` JSON document validated against the vendored
-  schema, and a reviewer DOCX. One command:
+```bash
+.venv/bin/python scripts/run_rubric_bundle.py path/to/export.zip
+```
 
-  ```bash
-  .venv/bin/python scripts/run_rubric_bundle.py path/to/export.zip
-  ```
+Preflight and build a Weave source:
 
-  Attribute values and authored wording are preserved verbatim; nothing is
-  inferred. Add `--progress-events` to stream `coursecraft.progress/1`
-  NDJSON for wizard-style consumers. The guided TUI's Bulk Unravel option
-  coordinates this same command once per immediate ZIP or unpacked export
-  folder; it does not add a second extraction implementation.
+```bash
+.venv/bin/python scripts/run_weave_bundle.py rubric.md --preflight
+.venv/bin/python scripts/run_weave_bundle.py rubric.md \
+  --output-dir output/example__weave_bundle
+```
 
-- **Weave**: the pinned Workbench producer accepts supported DOCX rubric
-  tables, Markdown tables, `coursecraft.rubric_authoring/1` JSON, eligible
-  `coursecraft.rubrics/1`, and the documented legacy JSON shape. The strict
-  bundle orchestrator preflights, builds, validates, and receipts a
-  rubric-only import package:
+The wizard also preserves the established non-interactive interface:
 
-  ```bash
-  .venv/bin/python scripts/run_weave_bundle.py rubric.md --preflight
-  .venv/bin/python scripts/run_weave_bundle.py rubric.md \
-    --output-dir output/example__weave_bundle
-  ```
+```bash
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --source path/to/export.zip --yes
 
-  Missing scoring or weights refuse unless their explicit approval flags are
-  supplied. Nothing is imported, and activity attachment remains manual.
-  Interactive and headless terminal builds bind the package to the exact
-  source SHA-256 and byte count shown by preflight.
+.venv/bin/python scripts/rubric_loom_wizard.py \
+  --door weave \
+  --source path/to/rubric.md \
+  --yes \
+  --approve-weave \
+  --output-dir output/example__weave_bundle
+```
 
-Two Workbench-owned `v1` intake templates are shipped as exact release-pinned
-assets:
+`--yes` never supplies missing rubric decisions. Headless Weave must separately
+name any permitted scoring or weight fallback.
+
+## Release-pinned intake templates
+
+Two Workbench-owned `v1` templates ship as exact pinned assets:
 
 ```bash
 .venv/bin/python scripts/rubric_loom_wizard.py \
   --door weave --list-templates --plain
+
 .venv/bin/python scripts/rubric_loom_wizard.py \
   --door weave \
   --copy-template rubric-weave-intake-template.md \
@@ -144,118 +230,102 @@ assets:
   --plain
 ```
 
-Listing and selecting never write. Copying requires an explicit destination;
-an existing regular file requires the separate `--replace-template` action,
-and symlink or non-regular destinations are refused. Complete and save the
-copy, select it in Weave, review producer preflight, correct missing scoring
-or explicitly approve only a permitted fallback, then type `WEAVE`. Downloading
-or completing a template changes nothing in Brightspace. A successful build is
-not an import, attachment remains manual, and scoring is never silently
-invented.
+Listing is read-only. Copying requires an explicit destination. Replacing an
+existing regular file requires the separate `--replace-template` action;
+symlink and non-regular destinations are refused. Copying or completing a
+template changes nothing in Brightspace.
 
-## Ownership
+## Architecture and ownership
 
-`coursecraft_workbench` remains the upstream owner of rubric contracts,
-extraction and build semantics, and live-import evidence. This repo contains
-byte-pinned downstream copies of the portable producer files; the pin and
-every promoted file digest are recorded in `upstream/workbench_pin.json`.
-The current mechanical distribution ref is Workbench
-`60d81c9ce7d4518111443d03cf854b584644c3cc`; its producer files retain the
-accepted semantics and repaired detached-HEAD provenance behavior at
-`71552e912b79d73a00b4d70fd97bd32386fbe2a4`.
-The rubric extraction scripts also ship inside `brightspace-blueprint-bundle`
-as part of full blueprint runs; both downstream copies trace to the same
-Workbench source, and fixes land upstream first.
+This repository is one portable producer with two doors that converge on the
+same Brightspace rubric dialect:
 
-Bundle-only code (the orchestrators, synthetic journey, release and
-environment mechanics, and terminal Rubric Loom) may be authored here. It
-must not silently fork upstream semantics.
+- **Unravel** preserves authored wording and attribute values, then emits a
+  review workbook, `coursecraft.rubrics/1` JSON validated against the vendored
+  schema, and an optional reviewer DOCX.
+- **Weave** accepts supported authoring sources and invokes the pinned
+  Workbench producer for strict preflight, package construction, validation,
+  normalized review outputs, and the final receipt.
 
-## Install and run the synthetic proof
+`coursecraft_workbench` owns rubric contracts, extraction and build semantics,
+and live-import evidence. This repository contains byte-pinned downstream
+copies of the portable producer files. The immutable source ref and every
+promoted file digest are recorded in `upstream/workbench_pin.json`.
+
+The current distribution ref is Workbench
+`60d81c9ce7d4518111443d03cf854b584644c3cc`; the accepted producer identity
+and semantics trace to
+`71552e912b79d73a00b4d70fd97bd32386fbe2a4`. Bundle-only code—its
+orchestrators, terminal experience, synthetic journey, environment handling,
+and release machinery—may be authored here. It must not silently fork upstream
+rubric semantics.
+
+The rubric extraction scripts also ship in `brightspace-blueprint-bundle` for
+full blueprint runs. Both downstream copies trace to the same Workbench
+source; semantic fixes land upstream first.
+
+## Verify the source and product boundary
+
+Check vendored producer bytes:
+
+```bash
+.venv/bin/python scripts/vendor_from_workbench.py --check
+.venv/bin/python scripts/vendor_from_workbench.py \
+  --compare-ref main \
+  --workbench ../coursecraft_workbench
+```
+
+Run the full synthetic proof:
 
 ```bash
 python3.13 scripts/bootstrap_env.py --dev
 .venv/bin/python scripts/run_synthetic_journey.py
 ```
 
-The journey weaves an import package from a synthetic fixture contract,
-validates it, unravels it back through extraction, and asserts the rubric
-names survive the loop. The receipt lands in
-`output/synthetic_journey/journey_receipt.json`. See
-`docs/SYNTHETIC_JOURNEY.md`.
+The journey weaves a package from a synthetic fixture, validates it, unravels
+it through the canonical extractor, and confirms that rubric names survive the
+round trip. Its receipt is written to
+`output/synthetic_journey/journey_receipt.json`.
 
-## The terminal wizard (two doors)
-
-```bash
-.venv/bin/python scripts/rubric_loom_wizard.py
-```
-
-Or double-click `launch_rubric_loom.command` (macOS). On a fresh machine it
-offers to build the `.venv`, then opens the Loom artwork and the explicit
-**Unravel** / **Weave** landing page. Unravel places its synthetic
-demonstration beside the early Single/Bulk choice; Weave keeps its
-demonstration in its source chooser.
-
-Unravel retains its export peek and review artifacts, and offers single or
-bulk processing after the door is selected. Weave invokes producer preflight,
-shows only producer-reported labels and scoring evidence, requires a named
-final approval, and leads with the receipt-grounded import ZIP.
-Both doors share automatic environment checks, the terminal kit,
-progress-event consumer, cancellation behavior, plain mode, launcher, and
-door-isolated remembered state. The verbose doctor is an explicit diagnostic
-command, not a normal journey screen. Legacy `--source PATH --yes` remains
-Unravel. Headless Weave requires
-`--door weave --source PATH --yes --approve-weave`. See
-`docs/RUBRIC_LOOM_WIZARD.md`.
-
-## Verify the source boundary
+Run all repository checks:
 
 ```bash
 .venv/bin/python scripts/vendor_from_workbench.py --check
-.venv/bin/python scripts/vendor_from_workbench.py --compare-ref main --workbench ../coursecraft_workbench
+.venv/bin/python -m pytest
 ```
 
-Promotion happens only after the named Workbench ref has passed its upstream
-review and tests:
-
-```bash
-.venv/bin/python scripts/vendor_from_workbench.py --update-pin --workbench ../coursecraft_workbench --ref <reviewed-commit>
-```
-
-## Build a release asset
+## Build a bundle release asset
 
 ```bash
 .venv/bin/python scripts/make_release_asset.py --ref <tag-or-commit>
 ```
 
-The builder exports one explicit ref (clean tree required; `--allow-dirty`
-builds the named ref anyway), stages:
+The builder exports one explicit ref and writes a reproducible
+`dist/brightspace-rubric-bundle-v<VERSION>.tar.gz` with a checksum sidecar.
+The archive carries:
 
 - `RELEASE_MANIFEST.json` (`coursecraft.bundle_release/1`) with source,
-  contract and runtime digests plus independent Unravel and Weave capability
-  records;
-- deterministic `SBOM.json` (`coursecraft.bundle_sbom/1`) from
-  `requirements-lock.txt`, including exact template asset records.
+  contract, runtime, Unravel, and Weave capability records;
+- deterministic `SBOM.json` (`coursecraft.bundle_sbom/1`) derived from
+  `requirements-lock.txt`, including the pinned template assets.
 
-It writes a reproducible `dist/brightspace-rubric-bundle-v<VERSION>.tar.gz`
-and matching `.sha256` sidecar. The version is read from `VERSION` at that
-ref. Unravel and Weave have separate runtime-marker gates; a missing Weave
-producer, pin, TUI, preflight, progress, receipt, or manual-attachment marker
-prevents the release build. Missing or mismatched template manifest/assets
-also prevent construction; the archive contains the exact bytes named by the
-Weave capability and SBOM.
+Missing or mismatched producer files, schemas, templates, runtime markers,
+preflight behavior, progress behavior, or receipt behavior prevent release
+construction.
 
-## Current surface
+## Repository map
 
-| Piece | Status |
+| Path | Purpose |
 | --- | --- |
-| `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Current release line: v1.3.1; an annotated version tag triggers pin verification, the complete test suite, deterministic asset construction, checksum verification, retained workflow artifacts, and GitHub release publication |
-| Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `60d81c9…`; accepted producer identity and semantics are `71552e9…` |
-| `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, exact source-byte binding, six progress steps, validated outputs, and a final receipt whose bundle commit comes from the exact repository root or immutable release manifest—never an ambient parent checkout |
-| `scripts/run_synthetic_journey.py` | Working proof with a written receipt |
-| Terminal Rubric Wizard | Working two-door surface; integrity-gated template list/copy, producer preflight, named Weave approval, exact source snapshot, receipt-grounded results, plain/headless mode, one macOS launcher |
-| Hosted workshop bench | Authorized next consumer; see `ROADMAP.md` R4 |
+| `scripts/rubric_loom_wizard.py` | Guided two-door terminal application |
+| `scripts/run_rubric_bundle.py` | Unravel orchestrator |
+| `scripts/run_weave_bundle.py` | Weave orchestrator |
+| `scripts/run_synthetic_journey.py` | Deterministic round-trip proof |
+| `scripts/make_release_asset.py` | Reproducible bundle release builder |
+| `upstream/workbench_pin.json` | Immutable provenance and byte-digest map |
+| `docs/REPOSITORY_BOUNDARY.md` | Ownership decision record |
+| `ROADMAP.md` | Phased product plan |
 
-The ownership decision record is `docs/REPOSITORY_BOUNDARY.md`. The phased
-plan is `ROADMAP.md`. Agent rules are `AGENTS.md`.
+Rubric Loom is licensed under
+[AGPL-3.0-or-later](LICENSE). Existing bundle-family commercial terms and
+attribution notices are preserved in the repository and release artifacts.

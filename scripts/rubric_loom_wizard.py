@@ -2226,7 +2226,8 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
                 ("  Bring", "A completed Word, Markdown, or JSON rubric."),
                 ("  Get", "A validated import ZIP with review and run receipts."),
                 ("", ""),
-                ("", "Rubric Loom has no AI component. Both doors run locally."),
+                ("", "Purely deterministic software, running locally in Python."),
+                ("", "No AI model reads or interprets your files."),
                 ("", "You will review exact outputs before anything is written."),
             ],
         )
@@ -2357,6 +2358,24 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 loom_art.banner(term)
 
+        # Verify or repair the private runtime at the front door. A first-time
+        # user should see setup before being asked to choose a journey or find
+        # a source path.
+        core_ok, docx_ok = ensure_environment(term, assume_yes=args.yes)
+        if not core_ok:
+            return 2
+        if (
+            interactive
+            and not args.yes
+            and not args.no_update_check
+            and os.environ.get("RUBRIC_LOOM_NO_RELEASE_CHECK") is None
+        ):
+            report_release_check(term, force=False, offer_open=True)
+
+        # jsonschema is now known to be available. Keep this import after the
+        # repair gate so a partial environment can still reach the installer.
+        import rubric_loom_weave as weave
+
         door = args.door
         unravel_mode = "single"
         if door is None:
@@ -2392,21 +2411,6 @@ def main(argv: list[str] | None = None) -> int:
         if door == "q":
             print("  nothing was run.")
             return 0
-
-        core_ok, docx_ok = ensure_environment(term, assume_yes=args.yes)
-        if not core_ok:
-            return 2
-        if (
-            interactive
-            and not args.yes
-            and not args.no_update_check
-            and os.environ.get("RUBRIC_LOOM_NO_RELEASE_CHECK") is None
-        ):
-            report_release_check(term, force=False, offer_open=True)
-
-        # jsonschema is now known to be available. Keep this import after the
-        # repair gate so a partial environment can still reach the installer.
-        import rubric_loom_weave as weave
 
         if template_action:
             return weave.run_template_headless(term, args)
