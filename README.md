@@ -26,9 +26,24 @@ structures. Processing stays on your computer, and the Loom does not change
 Brightspace: you review every output, import a Weave package yourself, and
 attach imported rubrics to activities manually.
 
-## Start here
+## Download Rubric Loom
 
-**On macOS:** clone or download this repository, then double-click
+For the one-download local application, use the
+[`brightspace-rubric-loom-runner` Releases page](https://github.com/timebeing92/brightspace-rubric-loom-runner/releases)
+and download `rubric-loom-managed-v<VERSION>.zip`. That package contains this
+engine and the exact runner version tested with it, plus double-click launchers,
+private-environment setup, verified updates, and rollback.
+
+Do not use GitHub’s green **Code > Download ZIP** button for an ordinary
+installation. That source-code ZIP contains only one repository. The runner’s
+managed release is the supported colleague-facing download.
+
+This repository remains the technical producer for the CourseCraft Workshop,
+headless integrations, source review, and bundle development.
+
+## Run the bundle directly
+
+**On macOS:** clone this repository, then double-click
 `launch_rubric_loom.command`. The launcher checks for Python 3.11–3.13 and,
 on the first run, offers to create a local `.venv` inside this folder. It
 then opens the Loom artwork and the two choices directly: **Unravel** or
