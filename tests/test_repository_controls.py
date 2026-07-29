@@ -36,8 +36,8 @@ def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_release_candidate_version_is_1_3_1() -> None:
-    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.1\n"
+def test_release_candidate_version_is_1_3_2() -> None:
+    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.2\n"
 
 
 def test_tag_release_workflow_is_guarded_and_publishes_both_assets() -> None:

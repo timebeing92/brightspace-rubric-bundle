@@ -503,10 +503,15 @@ def repair_runtime_dependencies(
     direct system-Python launch creates that same local environment and
     restarts into it rather than installing packages globally.
     """
+    in_private_environment = running_in_local_venv()
     target = (
-        "the private Rubric Loom environment"
-        if running_in_local_venv()
+        "the existing private Rubric Loom environment"
+        if in_private_environment
         else str(VENV_ROOT)
+    )
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}."
+        f"{sys.version_info.micro}"
     )
     print()
     print(
@@ -514,24 +519,31 @@ def repair_runtime_dependencies(
             term,
             "One-time setup needed",
             [
-                ("Missing", ", ".join(packages)),
-                ("Install into", target),
-                ("Source", "requirements-lock.txt"),
+                ("Python", f"{python_version} is already installed"),
+                ("Private environment", target),
+                ("Support packages", ", ".join(packages)),
+                ("Pinned by", "requirements-lock.txt"),
                 ("", ""),
+                ("", "Python itself will not be reinstalled."),
                 ("", "Nothing is installed into the system Python."),
             ],
         )
     )
+    prompt = (
+        "Install the missing Rubric Loom support packages now?"
+        if in_private_environment
+        else "Create the private Rubric Loom environment now?"
+    )
     if not loom_ui.confirm(
         term,
-        "Install the required Python packages now?",
+        prompt,
         default=True,
         assume_yes=assume_yes,
     ):
         print("  setup was skipped; nothing was run.")
         return False
 
-    if running_in_local_venv():
+    if in_private_environment:
         command = [
             sys.executable,
             "-m",
@@ -552,7 +564,11 @@ def repair_runtime_dependencies(
         loom_ui.status_line(
             term,
             "run",
-            "Installing the Rubric Loom dependencies",
+            (
+                "Installing Rubric Loom support packages"
+                if in_private_environment
+                else "Creating the private Rubric Loom environment"
+            ),
             target,
         )
     )
@@ -2226,7 +2242,8 @@ def choose_door(term: loom_ui.Term, state: dict) -> str:
                 ("  Bring", "A completed Word, Markdown, or JSON rubric."),
                 ("  Get", "A validated import ZIP with review and run receipts."),
                 ("", ""),
-                ("", "Rubric Loom has no AI component. Both doors run locally."),
+                ("", "Purely deterministic software, running locally in Python."),
+                ("", "No AI model reads or interprets your files."),
                 ("", "You will review exact outputs before anything is written."),
             ],
         )
@@ -2357,6 +2374,24 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 loom_art.banner(term)
 
+        # Verify or repair the private runtime at the front door. A first-time
+        # user should see setup before being asked to choose a journey or find
+        # a source path.
+        core_ok, docx_ok = ensure_environment(term, assume_yes=args.yes)
+        if not core_ok:
+            return 2
+        if (
+            interactive
+            and not args.yes
+            and not args.no_update_check
+            and os.environ.get("RUBRIC_LOOM_NO_RELEASE_CHECK") is None
+        ):
+            report_release_check(term, force=False, offer_open=True)
+
+        # jsonschema is now known to be available. Keep this import after the
+        # repair gate so a partial environment can still reach the installer.
+        import rubric_loom_weave as weave
+
         door = args.door
         unravel_mode = "single"
         if door is None:
@@ -2392,21 +2427,6 @@ def main(argv: list[str] | None = None) -> int:
         if door == "q":
             print("  nothing was run.")
             return 0
-
-        core_ok, docx_ok = ensure_environment(term, assume_yes=args.yes)
-        if not core_ok:
-            return 2
-        if (
-            interactive
-            and not args.yes
-            and not args.no_update_check
-            and os.environ.get("RUBRIC_LOOM_NO_RELEASE_CHECK") is None
-        ):
-            report_release_check(term, force=False, offer_open=True)
-
-        # jsonschema is now known to be available. Keep this import after the
-        # repair gate so a partial environment can still reach the installer.
-        import rubric_loom_weave as weave
 
         if template_action:
             return weave.run_template_headless(term, args)

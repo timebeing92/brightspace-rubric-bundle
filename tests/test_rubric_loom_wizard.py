@@ -553,6 +553,55 @@ def test_ordinary_environment_check_is_quiet_when_ready(capsys) -> None:
     assert capsys.readouterr().out == ""
 
 
+def test_guided_open_checks_environment_before_asking_for_a_door(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import rubric_loom_wizard as wizard
+
+    events: list[str] = []
+    monkeypatch.setattr(wizard.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(wizard.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(
+        wizard.loom_art,
+        "banner",
+        lambda term: events.append("banner"),
+    )
+    monkeypatch.setattr(
+        wizard,
+        "ensure_environment",
+        lambda term, *, assume_yes: (
+            events.append("environment") or True,
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        wizard,
+        "choose_door",
+        lambda term, state: events.append("door") or "q",
+    )
+    monkeypatch.setattr(wizard, "load_state", lambda: {})
+
+    result = wizard.main(["--plain", "--brisk", "--no-update-check"])
+
+    assert result == 0
+    assert events == ["banner", "environment", "door"]
+
+
+def test_door_card_states_the_deterministic_local_python_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    monkeypatch.setattr(loom_ui, "choose", lambda *args, **kwargs: "q")
+
+    assert wizard.choose_door(loom_ui.Term(plain=True), {}) == "q"
+    output = capsys.readouterr().out
+    assert "Purely deterministic software, running locally in Python." in output
+    assert "No AI model reads or interprets your files." in output
+
+
 def test_missing_dependencies_offer_one_locked_local_repair(
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -600,11 +649,47 @@ def test_missing_dependencies_offer_one_locked_local_repair(
     output = capsys.readouterr().out
     assert core_ok is True
     assert docx_ok is True
-    assert confirmations == ["Install the required Python packages now?"]
+    assert confirmations == [
+        "Install the missing Rubric Loom support packages now?"
+    ]
     assert "One-time setup needed" in output
+    assert "is already installed" in output
+    assert "Python itself will not be reinstalled." in output
     assert "jsonschema, openpyxl, python-docx" in output
     assert "requirements-lock.txt" in output
     assert "Environment ready" in output
+
+
+def test_first_setup_reuses_python_and_names_only_the_private_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    confirmations: list[str] = []
+    monkeypatch.setattr(wizard, "running_in_local_venv", lambda: False)
+
+    def decline(term, prompt, **kwargs):
+        del term, kwargs
+        confirmations.append(prompt)
+        return False
+
+    monkeypatch.setattr(loom_ui, "confirm", decline)
+
+    repaired = wizard.repair_runtime_dependencies(
+        loom_ui.Term(plain=True),
+        ["jsonschema"],
+        assume_yes=False,
+    )
+
+    assert repaired is False
+    assert confirmations == ["Create the private Rubric Loom environment now?"]
+    output = capsys.readouterr().out
+    assert "is already installed" in output
+    assert "Python itself will not be reinstalled." in output
+    assert "Private environment" in output
+    assert ".venv" in output
 
 
 def test_new_release_notice_is_informative_and_never_installs(
