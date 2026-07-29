@@ -503,10 +503,15 @@ def repair_runtime_dependencies(
     direct system-Python launch creates that same local environment and
     restarts into it rather than installing packages globally.
     """
+    in_private_environment = running_in_local_venv()
     target = (
-        "the private Rubric Loom environment"
-        if running_in_local_venv()
+        "the existing private Rubric Loom environment"
+        if in_private_environment
         else str(VENV_ROOT)
+    )
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}."
+        f"{sys.version_info.micro}"
     )
     print()
     print(
@@ -514,24 +519,31 @@ def repair_runtime_dependencies(
             term,
             "One-time setup needed",
             [
-                ("Missing", ", ".join(packages)),
-                ("Install into", target),
-                ("Source", "requirements-lock.txt"),
+                ("Python", f"{python_version} is already installed"),
+                ("Private environment", target),
+                ("Support packages", ", ".join(packages)),
+                ("Pinned by", "requirements-lock.txt"),
                 ("", ""),
+                ("", "Python itself will not be reinstalled."),
                 ("", "Nothing is installed into the system Python."),
             ],
         )
     )
+    prompt = (
+        "Install the missing Rubric Loom support packages now?"
+        if in_private_environment
+        else "Create the private Rubric Loom environment now?"
+    )
     if not loom_ui.confirm(
         term,
-        "Install the required Python packages now?",
+        prompt,
         default=True,
         assume_yes=assume_yes,
     ):
         print("  setup was skipped; nothing was run.")
         return False
 
-    if running_in_local_venv():
+    if in_private_environment:
         command = [
             sys.executable,
             "-m",
@@ -552,7 +564,11 @@ def repair_runtime_dependencies(
         loom_ui.status_line(
             term,
             "run",
-            "Installing the Rubric Loom dependencies",
+            (
+                "Installing Rubric Loom support packages"
+                if in_private_environment
+                else "Creating the private Rubric Loom environment"
+            ),
             target,
         )
     )
