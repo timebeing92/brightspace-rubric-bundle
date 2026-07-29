@@ -40,6 +40,26 @@ def test_release_candidate_version_is_1_3_2() -> None:
     assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.2\n"
 
 
+def test_workbench_is_defined_for_human_readers() -> None:
+    for relative in (
+        "README.md",
+        "ROADMAP.md",
+        "docs/REPOSITORY_BOUNDARY.md",
+    ):
+        text = " ".join(
+            (REPO_ROOT / relative).read_text(encoding="utf-8").split()
+        )
+        assert "upstream living library and development lab" in text
+        assert "production-ready versions" in text
+
+    tui = (REPO_ROOT / "scripts/rubric_loom_weave.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"upstream source", "CourseCraft Workbench"' in tui
+    assert "The living library and development lab for shared " in tui
+    assert "Reviewed, production-ready versions are pinned into " in tui
+
+
 def test_tag_release_workflow_is_guarded_and_publishes_both_assets() -> None:
     workflow = (
         REPO_ROOT / ".github" / "workflows" / "release.yml"

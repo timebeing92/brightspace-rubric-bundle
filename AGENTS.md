@@ -2,8 +2,13 @@
 
 ## Authority boundary
 
-`coursecraft_workbench` owns rubric schemas, extraction and build semantics,
-normalization rules, and live-import evidence. Files listed in
+CourseCraft Workbench is the upstream living library and development lab for
+shared CourseCraft schemas, scripts, tests, experiments, writing, and
+documentation. It holds the authoritative development copies; only reviewed,
+verified, production-ready versions are promoted to downstream products.
+
+`coursecraft_workbench` therefore owns rubric schemas, extraction and build
+semantics, normalization rules, and live-import evidence. Files listed in
 `upstream/workbench_pin.json` are mechanically promoted from one immutable
 Workbench commit. Do not edit those targets here. Change upstream behavior in
 the Workbench first, verify it there, then run

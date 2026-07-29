@@ -13,11 +13,18 @@ GitHub repository `brightspace-rubric-bundle` is the portable producer for
 the rubric product surface. The repo name follows the sibling convention;
 the product name is deliberately distinct from the repo name.
 
+CourseCraft Workbench is the upstream living library and development lab for
+the CourseCraft tool family. It curates authoritative development copies of
+shared schemas and producer code together with scripts, tests, experiments,
+technical writing, and documentation. Only reviewed, verified,
+production-ready versions are promoted from that living upstream space into
+pinned downstream products.
+
 ## Ownership
 
 | Repository | Owns |
 | --- | --- |
-| `coursecraft_workbench` | Rubric extraction and authoring contracts, extraction and build semantics, normalization and scoring rules, validator meaning, fixtures, and live-import evidence. |
+| `coursecraft_workbench` | The upstream library and development lab; rubric extraction and authoring contracts, extraction and build semantics, normalization and scoring rules, validator meaning, fixtures, and live-import evidence. |
 | `brightspace-rubric-bundle` | The portable rubric product: byte-pinned Workbench distribution, Unravel and Weave orchestrators, progress streaming, synthetic proof, terminal Rubric Loom, release identity/assets, and installation. |
 | `brightspace-blueprint-bundle` | Rubric extraction *within full blueprint runs* (the Rubric Appendix, `<label>__rubrics.*` artifacts of a blueprint bundle). Its copies of the extraction scripts stay governed by its own mirror-policy drift maps. |
 | `coursecraft-workshop-space` | Presentation over one checksum-verified pinned release; it owns upload staging, process supervision, retention, browser state, accessibility, and hosted evidence, never rubric semantics. |

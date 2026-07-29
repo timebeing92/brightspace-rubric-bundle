@@ -4,6 +4,12 @@ Phased like the sibling bundles: each phase has deliverables and an explicit
 exit condition. Nothing in a later phase starts without the earlier exit
 condition or an explicit operator decision.
 
+In this roadmap, CourseCraft Workbench means the upstream living library and
+development lab for shared schemas, scripts, tests, experiments, technical
+writing, and documentation. It holds authoritative development copies; only
+reviewed, verified, production-ready versions are promoted into this bundle
+and other downstream CourseCraft releases.
+
 ## R0 — Private repository activation (complete)
 
 - Byte-pinned Workbench surface: extraction scripts, builder scripts,

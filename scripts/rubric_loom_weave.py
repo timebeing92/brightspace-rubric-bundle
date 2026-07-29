@@ -476,8 +476,19 @@ def _interactive_template_handoff(term: loom_ui.Term) -> bool:
             "Release-pinned Weave templates",
             [
                 ("set", f"{catalog.template_set} {catalog.version}"),
-                ("Workbench ref", catalog.source_commit),
-                ("producer semantics", catalog.accepted_producer_commit),
+                ("upstream source", "CourseCraft Workbench"),
+                (
+                    "",
+                    "The living library and development lab for shared "
+                    "CourseCraft tooling.",
+                ),
+                (
+                    "",
+                    "Reviewed, production-ready versions are pinned into "
+                    "Rubric Loom releases.",
+                ),
+                ("upstream ref", catalog.source_commit),
+                ("accepted producer ref", catalog.accepted_producer_commit),
                 (
                     "",
                     "Listing and selecting are read-only. A copy is written only after "

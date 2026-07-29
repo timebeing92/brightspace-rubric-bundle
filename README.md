@@ -215,6 +215,16 @@ The wizard also preserves the established non-interactive interface:
 `--yes` never supplies missing rubric decisions. Headless Weave must separately
 name any permitted scoring or weight fallback.
 
+## What CourseCraft Workbench means
+
+CourseCraft Workbench is the upstream living library and development lab for
+the CourseCraft tool family. It maintains the authoritative development copies
+of shared schemas and producer code alongside scripts, tests, experiments,
+technical writing, and documentation. Work there may be exploratory; only
+reviewed, verified, production-ready versions are promoted into pinned
+downstream products such as this bundle and the Rubric Loom runner. People
+using Rubric Loom do not need to access, install, or operate the Workbench.
+
 ## Release-pinned intake templates
 
 Two Workbench-owned `v1` templates ship as exact pinned assets:
@@ -247,10 +257,11 @@ same Brightspace rubric dialect:
   Workbench producer for strict preflight, package construction, validation,
   normalized review outputs, and the final receipt.
 
-`coursecraft_workbench` owns rubric contracts, extraction and build semantics,
+CourseCraft Workbench owns rubric contracts, extraction and build semantics,
 and live-import evidence. This repository contains byte-pinned downstream
-copies of the portable producer files. The immutable source ref and every
-promoted file digest are recorded in `upstream/workbench_pin.json`.
+copies of production-ready producer files promoted from that living upstream
+library. The immutable source ref and every promoted file digest are recorded
+in `upstream/workbench_pin.json`.
 
 The current distribution ref is Workbench
 `60d81c9ce7d4518111443d03cf854b584644c3cc`; the accepted producer identity

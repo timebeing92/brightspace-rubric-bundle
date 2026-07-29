@@ -76,6 +76,11 @@ Brightspace.
 
 ## Verify before committing
 
+CourseCraft Workbench is the upstream living library and development lab where
+shared schemas, scripts, tests, experiments, writing, and documentation are
+maintained. The vendor check below confirms that this bundle contains the
+exact reviewed, production-ready files promoted from that upstream source.
+
 ```bash
 .venv/bin/python scripts/vendor_from_workbench.py --check
 .venv/bin/python -m pytest

@@ -18,7 +18,10 @@ Items 04 and 05 preserve the immutable v1.1.0 history. Item 06 records the
 subsequent additive v1.2.0 release. Item 07 preserves v1.2.0 unchanged while
 cutting the provenance-only v1.2.1 successor.
 
-Workbench remains the semantic owner. This repository owns pinned
-distribution, process orchestration, terminal presentation, and release
-identity. Nothing in this lane authorizes production-course use or automatic
-activity attachment.
+CourseCraft Workbench is the upstream living library and development lab for
+shared schemas, producer code, tests, experiments, writing, and documentation.
+It remains the semantic owner represented throughout these records. Reviewed,
+verified, production-ready versions are promoted from that living upstream
+space into this repository, which owns pinned distribution, process
+orchestration, terminal presentation, and release identity. Nothing in this
+lane authorizes production-course use or automatic activity attachment.
