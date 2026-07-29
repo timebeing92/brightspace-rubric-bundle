@@ -645,6 +645,9 @@ def ensure_environment(
 
 
 def installed_version() -> str:
+    override = os.environ.get("RUBRIC_LOOM_INSTALLED_VERSION", "").strip()
+    if override:
+        return override
     try:
         return VERSION_PATH.read_text(encoding="utf-8").strip()
     except OSError:

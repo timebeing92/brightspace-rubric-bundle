@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -20,13 +21,22 @@ from typing import Any, Callable
 
 
 SCHEMA = "coursecraft.rubric_loom_release_check/1"
+DEFAULT_RELEASE_REPOSITORY = "timebeing92/brightspace-rubric-bundle"
+ALLOWED_RELEASE_REPOSITORIES = {
+    DEFAULT_RELEASE_REPOSITORY,
+    "timebeing92/brightspace-rubric-loom-runner",
+}
+RELEASE_REPOSITORY = os.environ.get(
+    "RUBRIC_LOOM_RELEASE_REPOSITORY",
+    DEFAULT_RELEASE_REPOSITORY,
+)
+if RELEASE_REPOSITORY not in ALLOWED_RELEASE_REPOSITORIES:
+    RELEASE_REPOSITORY = DEFAULT_RELEASE_REPOSITORY
 API_URL = (
-    "https://api.github.com/repos/timebeing92/"
-    "brightspace-rubric-bundle/releases/latest"
+    f"https://api.github.com/repos/{RELEASE_REPOSITORY}/releases/latest"
 )
 RELEASES_URL = (
-    "https://github.com/timebeing92/"
-    "brightspace-rubric-bundle/releases"
+    f"https://github.com/{RELEASE_REPOSITORY}/releases"
 )
 CHECK_INTERVAL = dt.timedelta(days=1)
 NOTICE_INTERVAL = dt.timedelta(days=1)
@@ -160,7 +170,7 @@ def status_from_cache(
 def safe_release_url(value: object) -> str:
     text = str(value or "")
     parts = urllib.parse.urlsplit(text)
-    expected_prefix = "/timebeing92/brightspace-rubric-bundle/releases/"
+    expected_prefix = f"/{RELEASE_REPOSITORY}/releases/"
     if (
         parts.scheme == "https"
         and parts.netloc.lower() == "github.com"
