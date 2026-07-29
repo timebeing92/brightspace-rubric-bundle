@@ -45,14 +45,21 @@ SCRIPTS = REPO_ROOT / "scripts"
 ORCHESTRATOR = SCRIPTS / "run_rubric_bundle.py"
 WEAVE_ORCHESTRATOR = SCRIPTS / "run_weave_bundle.py"
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "tiny_rubrics_export"
-INPUT_LANE = REPO_ROOT / "input"
+USER_DATA_ROOT = Path(
+    os.environ.get("RUBRIC_LOOM_USER_DATA", str(REPO_ROOT))
+).expanduser().resolve()
+OUTPUT_LANE = USER_DATA_ROOT / "output"
+INPUT_LANE = USER_DATA_ROOT / "input"
+VENV_ROOT = Path(
+    os.environ.get("RUBRIC_LOOM_VENV", str(REPO_ROOT / ".venv"))
+).expanduser().resolve()
 LOG_NAME = "unravel_wizard.log"
 RUNTIME_REQUIREMENTS = REPO_ROOT / "requirements-lock.txt"
 VERSION_PATH = REPO_ROOT / "VERSION"
 RELEASE_CACHE_PATH = Path(
     os.environ.get(
         "RUBRIC_LOOM_RELEASE_CACHE",
-        str(REPO_ROOT / "output" / "update-cache" / "release_check.json"),
+        str(OUTPUT_LANE / "update-cache" / "release_check.json"),
     )
 )
 SUPPORTED_PYTHON = (3, 11), (3, 14)
@@ -67,7 +74,7 @@ RUNTIME_MODULES = (
 STATE_PATH = Path(
     os.environ.get(
         "RUBRIC_LOOM_STATE",
-        str(REPO_ROOT / "output" / ".rubric_loom_wizard_state.json"),
+        str(OUTPUT_LANE / ".rubric_loom_wizard_state.json"),
     )
 )
 
@@ -365,8 +372,8 @@ def python_supported() -> bool:
 
 
 def default_bundle_dir(label: str) -> Path:
-    """Repo-anchored default for the gitignored output lane."""
-    return REPO_ROOT / "output" / f"{label}__rubric_bundle"
+    """User-data-anchored default for one Unravel result."""
+    return OUTPUT_LANE / f"{label}__rubric_bundle"
 
 
 def output_lane_write_anchor(output_lane: Path) -> tuple[Path, bool]:
@@ -419,7 +426,7 @@ def environment_checks() -> list[tuple[str, bool, str, bool]]:
             True,
         ),
     ]
-    output_lane = REPO_ROOT / "output"
+    output_lane = OUTPUT_LANE
     output_anchor, output_ok = output_lane_write_anchor(output_lane)
     output_detail = relative_display(output_lane)
     if output_anchor != output_lane:
@@ -473,8 +480,8 @@ def missing_runtime_packages() -> list[str]:
 
 def local_venv_python() -> Path:
     if os.name == "nt":
-        return REPO_ROOT / ".venv" / "Scripts" / "python.exe"
-    return REPO_ROOT / ".venv" / "bin" / "python"
+        return VENV_ROOT / "Scripts" / "python.exe"
+    return VENV_ROOT / "bin" / "python"
 
 
 def running_in_local_venv() -> bool:
@@ -497,9 +504,9 @@ def repair_runtime_dependencies(
     restarts into it rather than installing packages globally.
     """
     target = (
-        "the local .venv"
+        "the private Rubric Loom environment"
         if running_in_local_venv()
-        else "a local .venv inside this Rubric Loom folder"
+        else str(VENV_ROOT)
     )
     print()
     print(
@@ -511,7 +518,7 @@ def repair_runtime_dependencies(
                 ("Install into", target),
                 ("Source", "requirements-lock.txt"),
                 ("", ""),
-                ("", "Nothing is installed outside this Rubric Loom folder."),
+                ("", "Nothing is installed into the system Python."),
             ],
         )
     )
@@ -538,6 +545,8 @@ def repair_runtime_dependencies(
             sys.executable,
             str(SCRIPTS / "bootstrap_env.py"),
             "--locked",
+            "--venv",
+            str(VENV_ROOT),
         ]
     print(
         loom_ui.status_line(
@@ -840,7 +849,7 @@ def discover_bulk_sources(root: Path) -> BulkDiscovery:
 
 def default_bulk_dir(root: Path) -> Path:
     label = unravel.sanitize_label(root.name or "batch")
-    return REPO_ROOT / "output" / f"{label}__bulk_unravel"
+    return OUTPUT_LANE / f"{label}__bulk_unravel"
 
 
 def choose_unravel_mode(term: loom_ui.Term, *, allow_back: bool):

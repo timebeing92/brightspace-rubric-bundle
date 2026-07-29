@@ -55,6 +55,98 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_runner_roots_keep_mutable_state_outside_the_bundle(
+    tmp_path: Path,
+) -> None:
+    user_data = tmp_path / "user-data"
+    private_venv = user_data / "runtime" / ".venv"
+    env = dict(os.environ)
+    env["RUBRIC_LOOM_USER_DATA"] = str(user_data)
+    env["RUBRIC_LOOM_VENV"] = str(private_venv)
+    probe = """
+import json
+import rubric_loom_wizard as wizard
+import rubric_loom_weave as weave
+print(json.dumps({
+    "wizard_user_data": str(wizard.USER_DATA_ROOT),
+    "wizard_input": str(wizard.INPUT_LANE),
+    "wizard_output": str(wizard.OUTPUT_LANE),
+    "wizard_state": str(wizard.STATE_PATH),
+    "wizard_cache": str(wizard.RELEASE_CACHE_PATH),
+    "wizard_venv": str(wizard.VENV_ROOT),
+    "wizard_single": str(wizard.default_bundle_dir("one")),
+    "wizard_bulk": str(wizard.default_bulk_dir(wizard.USER_DATA_ROOT / "batch")),
+    "weave_user_data": str(weave.USER_DATA_ROOT),
+    "weave_input": str(weave.INPUT_LANE),
+    "weave_output": str(weave.OUTPUT_LANE),
+    "weave_log": str(weave.LOG_LANE),
+    "weave_result": str(weave.default_bundle_dir("one")),
+}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=SCRIPTS,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    paths = json.loads(result.stdout)
+    assert paths == {
+        "wizard_user_data": str(user_data),
+        "wizard_input": str(user_data / "input"),
+        "wizard_output": str(user_data / "output"),
+        "wizard_state": str(user_data / "output" / ".rubric_loom_wizard_state.json"),
+        "wizard_cache": str(
+            user_data / "output" / "update-cache" / "release_check.json"
+        ),
+        "wizard_venv": str(private_venv),
+        "wizard_single": str(user_data / "output" / "one__rubric_bundle"),
+        "wizard_bulk": str(user_data / "output" / "batch__bulk_unravel"),
+        "weave_user_data": str(user_data),
+        "weave_input": str(user_data / "input"),
+        "weave_output": str(user_data / "output"),
+        "weave_log": str(user_data / "output" / "logs"),
+        "weave_result": str(user_data / "output" / "one__weave_bundle"),
+    }
+    source = WIZARD.read_text(encoding="utf-8")
+    assert '"--venv"' in source
+    assert "str(VENV_ROOT)" in source
+
+
+def test_runner_user_data_root_receives_default_outputs(
+    tmp_path: Path,
+) -> None:
+    user_data = tmp_path / "user-data"
+    env = dict(os.environ)
+    env["RUBRIC_LOOM_USER_DATA"] = str(user_data)
+    env["RUBRIC_LOOM_STATE"] = str(user_data / "output" / "state.json")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(WIZARD),
+            "--source",
+            str(FIXTURE),
+            "--yes",
+            "--plain",
+            "--no-docx",
+            "--no-update-check",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = user_data / "output" / "tiny_rubrics_export__rubric_bundle"
+    assert (output / "tiny_rubrics_export__rubrics.xlsx").is_file()
+    assert (output / "tiny_rubrics_export__rubrics.json").is_file()
+    assert (output / "unravel_wizard.log").is_file()
+    assert (user_data / "output" / "state.json").is_file()
+
+
 # ---------------------------------------------------------------------------
 # R3 exit condition: the wizard drives the full Unravel journey on the
 # synthetic fixture with the same receipts as the CLI.

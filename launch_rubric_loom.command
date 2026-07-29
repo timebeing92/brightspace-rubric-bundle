@@ -13,10 +13,12 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$'\033[0m'
   C_DIM=$'\033[2m'
   C_BOLD=$'\033[1m'
+  C_ROSE=$'\033[38;5;174m'
 else
   C_RESET=""
   C_DIM=""
   C_BOLD=""
+  C_ROSE=""
 fi
 
 hold_open() {

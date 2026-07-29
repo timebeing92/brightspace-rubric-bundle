@@ -601,6 +601,7 @@ def test_launcher_opens_the_one_art_led_tui_and_is_valid_shell() -> None:
     assert "scripts/bootstrap_env.py\" --locked" in source
     assert "Workshop doctor" not in source
     assert "Selection [1]" not in source
+    assert "C_ROSE=" in source
     result = subprocess.run(
         ["bash", "-n", str(launcher)],
         cwd=REPO_ROOT,
