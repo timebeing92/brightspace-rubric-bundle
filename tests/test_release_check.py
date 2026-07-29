@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -124,3 +126,71 @@ def test_version_and_release_url_validation() -> None:
         "brightspace-rubric-bundle/releases/tag/v1.3.0"
     )
     assert release_check.safe_release_url(expected) == expected
+
+
+def test_runner_release_repository_override_is_allowlisted() -> None:
+    probe = (
+        "import json, release_check; "
+        "print(json.dumps({"
+        "'repository': release_check.RELEASE_REPOSITORY, "
+        "'api_url': release_check.API_URL, "
+        "'releases_url': release_check.RELEASES_URL"
+        "}))"
+    )
+    env = dict(os.environ)
+    env["RUBRIC_LOOM_RELEASE_REPOSITORY"] = (
+        "timebeing92/brightspace-rubric-loom-runner"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=ROOT / "scripts",
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload == {
+        "repository": "timebeing92/brightspace-rubric-loom-runner",
+        "api_url": (
+            "https://api.github.com/repos/timebeing92/"
+            "brightspace-rubric-loom-runner/releases/latest"
+        ),
+        "releases_url": (
+            "https://github.com/timebeing92/"
+            "brightspace-rubric-loom-runner/releases"
+        ),
+    }
+
+
+def test_unknown_release_repository_override_falls_back_to_bundle() -> None:
+    probe = "import release_check; print(release_check.RELEASE_REPOSITORY)"
+    env = dict(os.environ)
+    env["RUBRIC_LOOM_RELEASE_REPOSITORY"] = "someone/unknown-repository"
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=ROOT / "scripts",
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == release_check.DEFAULT_RELEASE_REPOSITORY
+
+
+def test_runner_can_supply_the_installed_release_version() -> None:
+    probe = "import rubric_loom_wizard; print(rubric_loom_wizard.installed_version())"
+    env = dict(os.environ)
+    env["RUBRIC_LOOM_INSTALLED_VERSION"] = "1.0.0"
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=ROOT / "scripts",
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "1.0.0"

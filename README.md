@@ -59,6 +59,11 @@ offers to install the pinned dependencies into its local `.venv`. The full
 diagnostic checklist remains available with
 `.venv/bin/python scripts/rubric_loom_wizard.py --doctor`.
 
+Managed runners can keep replaceable program files separate from persistent
+work by setting `RUBRIC_LOOM_USER_DATA` to the data root and
+`RUBRIC_LOOM_VENV` to the private environment directory. With no overrides,
+the standalone bundle retains its existing repository-local behavior.
+
 The guided TUI also checks GitHub for a newer published Rubric Loom release
 at most once per day. Current, offline, and failed checks stay quiet. When a
 newer release exists, the Loom shows the installed and available versions and
@@ -230,7 +235,7 @@ Weave capability and SBOM.
 | Piece | Status |
 | --- | --- |
 | `scripts/run_rubric_bundle.py` (Unravel orchestrator) | Working; emits `coursecraft.progress/1` on request |
-| `scripts/make_release_asset.py` (release machinery) | Current release line: v1.3.0; an annotated version tag now triggers pin verification, the complete test suite, deterministic asset construction, checksum verification, retained workflow artifacts, and GitHub release publication |
+| `scripts/make_release_asset.py` (release machinery) | Current release line: v1.3.1; an annotated version tag triggers pin verification, the complete test suite, deterministic asset construction, checksum verification, retained workflow artifacts, and GitHub release publication |
 | Pinned producer, schemas, fixtures, and templates | 36 byte-identical Workbench files at `60d81c9…`; accepted producer identity and semantics are `71552e9…` |
 | `scripts/run_weave_bundle.py` (Weave orchestrator) | Working; strict preflight, exact source-byte binding, six progress steps, validated outputs, and a final receipt whose bundle commit comes from the exact repository root or immutable release manifest—never an ambient parent checkout |
 | `scripts/run_synthetic_journey.py` | Working proof with a written receipt |

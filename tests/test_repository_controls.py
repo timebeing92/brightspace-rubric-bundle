@@ -36,8 +36,8 @@ def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_release_candidate_version_is_1_3_0() -> None:
-    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.0\n"
+def test_release_candidate_version_is_1_3_1() -> None:
+    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.1\n"
 
 
 def test_tag_release_workflow_is_guarded_and_publishes_both_assets() -> None:
@@ -63,7 +63,8 @@ def test_tag_release_workflow_is_guarded_and_publishes_both_assets() -> None:
     ):
         assert marker in workflow
 
-    release_notes = REPO_ROOT / "docs" / "releases" / "v1.3.0.md"
+    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    release_notes = REPO_ROOT / "docs" / "releases" / f"v{version}.md"
     assert release_notes.is_file()
 
 

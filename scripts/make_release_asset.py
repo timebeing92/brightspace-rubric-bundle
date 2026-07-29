@@ -395,7 +395,9 @@ def release_capabilities(root: Path) -> dict[str, dict[str, Any]]:
         ),
         "scripts/loom_progress.py": ("coursecraft.progress/1",),
         "scripts/release_check.py": (
-            "brightspace-rubric-bundle/releases/latest",
+            "DEFAULT_RELEASE_REPOSITORY",
+            "brightspace-rubric-loom-runner",
+            "RUBRIC_LOOM_RELEASE_REPOSITORY",
             "coursecraft.rubric_loom_release_check/1",
         ),
         "scripts/bootstrap_env.py": (

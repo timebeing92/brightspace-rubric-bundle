@@ -36,10 +36,14 @@ FIXTURE = (
     / "rubric_authoring"
     / "three_level_explicit.md"
 )
-INPUT_LANE = REPO_ROOT / "input"
+USER_DATA_ROOT = Path(
+    os.environ.get("RUBRIC_LOOM_USER_DATA", str(REPO_ROOT))
+).expanduser().resolve()
+OUTPUT_LANE = USER_DATA_ROOT / "output"
+INPUT_LANE = USER_DATA_ROOT / "input"
 LOG_NAME = "weave_wizard.log"
 LOG_LANE = Path(
-    os.environ.get("RUBRIC_LOOM_LOG_DIR", str(REPO_ROOT / "output" / "logs"))
+    os.environ.get("RUBRIC_LOOM_LOG_DIR", str(OUTPUT_LANE / "logs"))
 )
 RUN_SCHEMA_PATH = (
     REPO_ROOT / "workspace/reference/schemas/course/run_identity_schema.json"
@@ -118,7 +122,7 @@ def default_label(source: Path) -> str:
 
 
 def default_bundle_dir(label: str) -> Path:
-    return REPO_ROOT / "output" / f"{label}__weave_bundle"
+    return OUTPUT_LANE / f"{label}__weave_bundle"
 
 
 def source_options(
