@@ -2,9 +2,9 @@
   "schema": "coursecraft.workbench_vendor_pin/1",
   "source_repository": "https://github.com/timebeing92/coursecraft-workbench.git",
   "source_branch": "main",
-  "source_commit": "60d81c9ce7d4518111443d03cf854b584644c3cc",
+  "source_commit": "a00fc4eca1834070f5208e03f4405dea9f87ad7f",
   "accepted_producer_commit": "71552e912b79d73a00b4d70fd97bd32386fbe2a4",
-  "source_committed_at": "2026-07-28T15:56:07-04:00",
+  "source_committed_at": "2026-08-17T20:24:15-04:00",
   "policy": "byte-identical mechanical promotion; behavior changes upstream first",
   "files": [
     {
@@ -35,7 +35,7 @@
     {
       "source": "scripts/generate_rubric_weave_intake_templates.py",
       "target": "scripts/generate_rubric_weave_intake_templates.py",
-      "sha256": "598aa1fe691358df1cc9528d4dfab7cd3eeec18d57f0f889484bbc037814a60d"
+      "sha256": "509b62722b8c498a6baec484a2ca39365b57a0b17edb6005872b5c309a71af3b"
     },
     {
       "source": "scripts/make_rubric_package.py",
@@ -145,7 +145,7 @@
     {
       "source": "tests/test_rubric_weave_templates.py",
       "target": "tests/test_rubric_weave_templates.py",
-      "sha256": "824d550bb1b4744a835b54537e430bac3e6e83ad183a70c0aaa6b8b57101c4d2"
+      "sha256": "1320b70890ab4e012fe5f5c81954de4466391337cfd87b0697f75b1c28adfc6f"
     },
     {
       "source": "workspace/reference/schemas/course/run_identity_schema.json",
@@ -170,22 +170,22 @@
     {
       "source": "workspace/reference/templates/rubric-weave/v1/README.md",
       "target": "workspace/reference/templates/rubric-weave/v1/README.md",
-      "sha256": "eef7acce97684857116ea4e1b648707c2781ac0d024739b2f6b1492150c3230d"
+      "sha256": "8126aace5c092656dca5aa01a29fbba4e77012c4601d0131b129fe24c00420ba"
     },
     {
       "source": "workspace/reference/templates/rubric-weave/v1/manifest.json",
       "target": "workspace/reference/templates/rubric-weave/v1/manifest.json",
-      "sha256": "726c92843896f162c52b0d232a7c825e8f4788e2eb3ddd3f99a4ec1820da004e"
+      "sha256": "0d57b8bb77103d59afb795738fd1562f84adb96cb91d32f652be4f0c4459cdef"
     },
     {
       "source": "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.docx",
       "target": "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.docx",
-      "sha256": "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6"
+      "sha256": "033c985041e9b1ebf082b28c29a4a4aafa314e92d583a98d668138d76e7046a7"
     },
     {
       "source": "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.md",
       "target": "workspace/reference/templates/rubric-weave/v1/rubric-weave-intake-template.md",
-      "sha256": "564ba8ebcee07281cbbe98045c8d56cc1f55e7694d7e453c49033c75db1e6830"
+      "sha256": "1bd8b37f5fa15d089d34b7a6feb9df01005e14f9eff5f4f7cfff076d5dc7b07c"
     }
   ]
 }

@@ -26,7 +26,7 @@ the product name is deliberately distinct from the repo name.
 
 The mechanical distribution surface is byte-pinned from
 `coursecraft_workbench` commit
-`60d81c9ce7d4518111443d03cf854b584644c3cc` (2026-07-28). The accepted
+`a00fc4eca1834070f5208e03f4405dea9f87ad7f` (2026-08-06). The accepted
 producer identity and semantics are commit
 `71552e912b79d73a00b4d70fd97bd32386fbe2a4`; it preserves commit provenance
 when GitHub runs from a detached `HEAD` without changing rubric normalization,

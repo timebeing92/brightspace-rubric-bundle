@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import importlib
+from importlib import metadata as importlib_metadata
 import importlib.util
 import json
 import os
@@ -68,6 +69,10 @@ RUNTIME_MODULES = (
     ("openpyxl", "openpyxl"),
     ("docx", "python-docx"),
 )
+
+
+class RuntimeLockError(RuntimeError):
+    """The release dependency lock cannot be audited safely."""
 
 # Remembered answers live in the gitignored output/ lane; the env override
 # exists so tests never touch the operator's remembered choices.
@@ -398,11 +403,33 @@ def output_lane_write_anchor(output_lane: Path) -> tuple[Path, bool]:
 def environment_checks() -> list[tuple[str, bool, str, bool]]:
     """Return setup facts as (label, ok, detail, blocks_core)."""
     version = ".".join(str(part) for part in sys.version_info[:3])
+    try:
+        lock_mismatches = runtime_lock_mismatches()
+        lock_error = ""
+    except RuntimeLockError as exc:
+        lock_mismatches = []
+        lock_error = str(exc)
+    core_lock_mismatches = [
+        package for package in lock_mismatches if package != "python-docx"
+    ]
+    docx_lock_mismatch = "python-docx" in lock_mismatches
     checks: list[tuple[str, bool, str, bool]] = [
         ("Python 3.11–3.13", python_supported(), version, True),
         ("jsonschema (contract validation)", module_present("jsonschema"), "", True),
         ("openpyxl (workbook writer)", module_present("openpyxl"), "", True),
         ("python-docx (reviewer document)", module_present("docx"), "", False),
+        (
+            "pinned core support packages",
+            not lock_error and not core_lock_mismatches,
+            lock_error or ", ".join(core_lock_mismatches) or "requirements-lock.txt",
+            True,
+        ),
+        (
+            "pinned python-docx",
+            not lock_error and not docx_lock_mismatch,
+            lock_error or ("python-docx" if docx_lock_mismatch else "requirements-lock.txt"),
+            False,
+        ),
         ("Unravel orchestrator", ORCHESTRATOR.is_file(), "scripts/run_rubric_bundle.py", True),
         (
             "Weave orchestrator",
@@ -478,6 +505,64 @@ def missing_runtime_packages() -> list[str]:
     ]
 
 
+def locked_runtime_requirements(path: Path | None = None) -> dict[str, str]:
+    """Parse the release's exact, simple ``name==version`` dependency lock."""
+
+    selected = path or RUNTIME_REQUIREMENTS
+    try:
+        lines = selected.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise RuntimeLockError("requirements-lock.txt is missing or unreadable") from exc
+    requirements: dict[str, str] = {}
+    normalized_names: set[str] = set()
+    for line_number, raw in enumerate(lines, start=1):
+        value = raw.strip()
+        if not value or value.startswith("#"):
+            continue
+        if value.count("==") != 1:
+            raise RuntimeLockError(
+                f"requirements-lock.txt line {line_number} is not an exact pin"
+            )
+        package, version = (part.strip() for part in value.split("==", 1))
+        if (
+            not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", package)
+            or not version
+            or any(character.isspace() for character in version)
+        ):
+            raise RuntimeLockError(
+                f"requirements-lock.txt line {line_number} is invalid"
+            )
+        normalized = re.sub(r"[-_.]+", "-", package).casefold()
+        if normalized in normalized_names:
+            raise RuntimeLockError(
+                f"requirements-lock.txt repeats package {package}"
+            )
+        normalized_names.add(normalized)
+        requirements[package] = version
+    if not requirements:
+        raise RuntimeLockError("requirements-lock.txt contains no exact pins")
+    return requirements
+
+
+def runtime_lock_mismatches() -> list[str]:
+    """Return locked distributions that are missing or at a different version."""
+
+    mismatches: list[str] = []
+    for package, expected in locked_runtime_requirements().items():
+        try:
+            actual = importlib_metadata.version(package)
+        except importlib_metadata.PackageNotFoundError:
+            mismatches.append(package)
+            continue
+        except Exception as exc:  # corrupted local package metadata
+            raise RuntimeLockError(
+                f"installed package metadata is unreadable for {package}"
+            ) from exc
+        if actual != expected:
+            mismatches.append(package)
+    return mismatches
+
+
 def local_venv_python() -> Path:
     if os.name == "nt":
         return VENV_ROOT / "Scripts" / "python.exe"
@@ -517,7 +602,11 @@ def repair_runtime_dependencies(
     print(
         loom_ui.card(
             term,
-            "One-time setup needed",
+            (
+                "Private environment update needed"
+                if in_private_environment
+                else "One-time setup needed"
+            ),
             [
                 ("Python", f"{python_version} is already installed"),
                 ("Private environment", target),
@@ -530,7 +619,7 @@ def repair_runtime_dependencies(
         )
     )
     prompt = (
-        "Install the missing Rubric Loom support packages now?"
+        "Install or update the Rubric Loom support packages now?"
         if in_private_environment
         else "Create the private Rubric Loom environment now?"
     )
@@ -601,12 +690,17 @@ def repair_runtime_dependencies(
         return False  # pragma: no cover - os.execv replaces this process
 
     importlib.invalidate_caches()
-    if missing_runtime_packages():
+    try:
+        lock_mismatches = runtime_lock_mismatches()
+    except RuntimeLockError as exc:
+        print(loom_ui.status_line(term, "bad", str(exc)))
+        return False
+    if missing_runtime_packages() or lock_mismatches:
         print(
             loom_ui.status_line(
                 term,
                 "bad",
-                "Setup completed but required packages are still unavailable",
+                "Setup completed but required packages are unavailable or out of date",
             )
         )
         return False
@@ -619,8 +713,23 @@ def ensure_environment(
     *,
     assume_yes: bool,
 ) -> tuple[bool, bool]:
-    """Quietly verify setup, offering repair only when packages are missing."""
-    packages = missing_runtime_packages()
+    """Quietly verify setup, offering repair for missing or drifted packages."""
+
+    try:
+        lock_mismatches = runtime_lock_mismatches()
+    except RuntimeLockError as exc:
+        print()
+        print(
+            loom_ui.card(
+                term,
+                "The Loom cannot verify its private environment",
+                [("requirements lock", str(exc))],
+            )
+        )
+        return False, False
+    packages = list(
+        dict.fromkeys([*lock_mismatches, *missing_runtime_packages()])
+    )
     if packages and not repair_runtime_dependencies(
         term, packages, assume_yes=assume_yes
     ):
@@ -636,7 +745,14 @@ def ensure_environment(
         for label, ok, detail, core in checks
         if core and not ok
     ]
-    docx_ok = module_present("docx")
+    try:
+        current_lock_mismatches = runtime_lock_mismatches()
+    except RuntimeLockError:
+        current_lock_mismatches = ["python-docx"]
+    docx_ok = (
+        module_present("docx")
+        and "python-docx" not in current_lock_mismatches
+    )
     if failures:
         rows = [(label, detail or "missing") for label, detail in failures]
         rows.extend(

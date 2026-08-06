@@ -9,22 +9,26 @@
     "brightspace_import": "A successful local build or validation is not a Brightspace import or proof of Brightspace acceptance.",
     "scoring": "Scores and weights are never silently invented; missing or ambiguous evidence refuses unless the operator explicitly approves a named fallback."
   },
+  "completion_sentinel": {
+    "field": "rubric_title",
+    "value": "SYNTHETIC PRACTICE RUBRIC - REPLACE BEFORE USE"
+  },
   "path_base": "manifest_directory",
   "schema": "coursecraft.rubric_weave_template_manifest/1",
   "template_set": "rubric-weave-intake",
   "templates": [
     {
-      "bytes": 36204,
+      "bytes": 36087,
       "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "path": "rubric-weave-intake-template.docx",
-      "sha256": "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6",
+      "sha256": "033c985041e9b1ebf082b28c29a4a4aafa314e92d583a98d668138d76e7046a7",
       "version": "v1"
     },
     {
-      "bytes": 2410,
+      "bytes": 2230,
       "media_type": "text/markdown",
       "path": "rubric-weave-intake-template.md",
-      "sha256": "564ba8ebcee07281cbbe98045c8d56cc1f55e7694d7e453c49033c75db1e6830",
+      "sha256": "1bd8b37f5fa15d089d34b7a6feb9df01005e14f9eff5f4f7cfff076d5dc7b07c",
       "version": "v1"
     }
   ],

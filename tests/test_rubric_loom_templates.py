@@ -23,13 +23,13 @@ import rubric_loom_templates as templates  # noqa: E402
 
 EXPECTED = {
     "rubric-weave-intake-template.docx": (
-        36204,
-        "9242235441c23d20e32c52455ee65be4fb380199c826b946c0d93a6e78d193d6",
+        36087,
+        "033c985041e9b1ebf082b28c29a4a4aafa314e92d583a98d668138d76e7046a7",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ),
     "rubric-weave-intake-template.md": (
-        2410,
-        "564ba8ebcee07281cbbe98045c8d56cc1f55e7694d7e453c49033c75db1e6830",
+        2230,
+        "1bd8b37f5fa15d089d34b7a6feb9df01005e14f9eff5f4f7cfff076d5dc7b07c",
         "text/markdown",
     ),
 }
@@ -67,12 +67,15 @@ def template_root(tmp_path: Path) -> Path:
 
 def test_catalog_reports_only_exact_release_pinned_assets() -> None:
     catalog = templates.load_catalog()
-    assert catalog.source_commit == "60d81c9ce7d4518111443d03cf854b584644c3cc"
+    assert catalog.source_commit == "a00fc4eca1834070f5208e03f4405dea9f87ad7f"
     assert (
         catalog.accepted_producer_commit
         == "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
     )
     assert [asset.name for asset in catalog.assets] == list(EXPECTED)
+    assert catalog.completion_sentinel == (
+        "SYNTHETIC PRACTICE RUBRIC - REPLACE BEFORE USE"
+    )
     for asset in catalog.assets:
         expected_bytes, expected_sha, expected_media = EXPECTED[asset.name]
         assert asset.version == "v1"
@@ -303,7 +306,7 @@ def test_copy_symlink_race_never_changes_victim_bytes_or_mode(
 
 
 @pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
-def test_interactive_template_copy_stops_for_editing_before_weave(
+def test_interactive_template_copy_remembers_destination_and_can_finish(
     tmp_path: Path,
 ) -> None:
     from test_rubric_loom_wizard import PtyWizard
@@ -313,22 +316,160 @@ def test_interactive_template_copy_stops_for_editing_before_weave(
         ["--brisk", "--door", "weave"],
         state=tmp_path / "state.json",
     )
-    session.wait_for(b"Where is the completed rubric you want to package?")
+    session.wait_for(b"How would you like to begin?")
     session.send(b"template\r")
-    session.wait_for(b"Release-pinned Weave templates")
-    session.wait_for(b"Which editable template should the loom show?")
+    session.wait_for(b"Create a new rubric from a template")
+    session.wait_for(b"Which type of editable template would you like?")
     session.send(b"rubric-weave-intake-template.md\r")
-    session.wait_for(b"Pinned template details")
-    session.wait_for(b"Copy these exact bytes")
-    session.send(b"y\r")
-    session.wait_for(b"Destination file")
-    session.send(str(destination).encode() + b"\r")
-    session.wait_for(b"Template copy ready")
+    session.wait_for(b"About this template")
+    destination_card = b"Where should the editable copy go?"
+    session.wait_for(destination_card)
+    session.send(b"1\r")
+    session.wait_for(b"Folder for the editable copy")
+    session.send(str(tmp_path).encode() + b"\r")
+    session.wait_for_count(destination_card, 2)
+    session.send(b"2\r")
+    session.wait_for(b"File name")
+    session.send(destination.name.encode() + b"\r")
+    session.wait_for_count(destination_card, 3)
+    session.send(b"\r")
+    session.wait_for(b"Your editable template is ready")
+    session.wait_for(b"What would you like to do next?")
+    session.send(b"done\r")
     assert session.finish() == 0
     assert hashlib.sha256(destination.read_bytes()).hexdigest() == EXPECTED[
         "rubric-weave-intake-template.md"
     ][1]
     assert b"no package was built" in session.stream
+    assert b"release-pinned" not in session.stream.lower()
+    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert state["doors"]["weave"]["template_folder"] == str(tmp_path)
+    assert state["doors"]["weave"]["template_filename"] == destination.name
+
+
+def test_post_copy_can_open_edit_and_continue_without_relaunch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_weave as journey
+
+    destination = tmp_path / "editable.md"
+    destination.write_bytes(b"original template")
+    original_binding = journey.file_source_binding(destination)
+    term = loom_ui.Term(plain=True)
+    term.is_tty = True
+
+    monkeypatch.setattr(loom_ui, "choose", lambda *args, **kwargs: "continue")
+
+    def open_and_edit(_term, path: Path) -> bool:
+        path.write_bytes(b"completed rubric")
+        return True
+
+    monkeypatch.setattr(journey, "open_template_file", open_and_edit)
+    monkeypatch.setattr(loom_ui, "prompt_text", lambda *args, **kwargs: "")
+
+    assert journey._post_copy_handoff(
+        term,
+        destination,
+        original_binding,
+    ) == destination
+    assert "continuing to Weave preflight" in capsys.readouterr().out
+
+
+def test_post_copy_refuses_unchanged_template_before_continuing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import loom_ui
+    import rubric_loom_weave as journey
+
+    destination = tmp_path / "editable.md"
+    destination.write_bytes(b"unchanged template")
+    original_binding = journey.file_source_binding(destination)
+    term = loom_ui.Term(plain=True)
+    term.is_tty = True
+    replies = iter(("", "q"))
+
+    monkeypatch.setattr(loom_ui, "choose", lambda *args, **kwargs: "continue")
+    monkeypatch.setattr(journey, "open_template_file", lambda *args: True)
+    monkeypatch.setattr(
+        loom_ui,
+        "prompt_text",
+        lambda *args, **kwargs: next(replies),
+    )
+
+    assert (
+        journey._post_copy_handoff(term, destination, original_binding)
+        is journey.TEMPLATE_HANDOFF
+    )
+    assert "template has not changed yet" in capsys.readouterr().out
+
+
+def test_remembered_template_destination_reuses_folder_and_avoids_collision(
+    tmp_path: Path,
+) -> None:
+    import rubric_loom_weave as journey
+
+    catalog = templates.load_catalog()
+    word = next(asset for asset in catalog.assets if asset.name.endswith(".docx"))
+    (tmp_path / "colleague-rubric.docx").write_bytes(b"existing rubric")
+
+    assert journey._default_template_folder(str(tmp_path)) == tmp_path
+    assert journey._default_template_name(word, "colleague-rubric.md") == (
+        "colleague-rubric.docx"
+    )
+    assert journey._available_template_name(
+        tmp_path,
+        "colleague-rubric.docx",
+    ) == "colleague-rubric-2.docx"
+
+
+def test_open_template_folder_runs_selected_platform_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import loom_ui
+    import rubric_loom_weave as journey
+
+    command = ["test-folder-opener", str(tmp_path)]
+    calls: list[list[str]] = []
+    monkeypatch.setattr(journey, "folder_open_command", lambda _path: command)
+
+    def run(selected: list[str], *, check: bool):
+        assert check is False
+        calls.append(selected)
+        return subprocess.CompletedProcess(selected, 0)
+
+    monkeypatch.setattr(journey.subprocess, "run", run)
+    term = loom_ui.Term(plain=True)
+    assert journey.open_template_folder(term, tmp_path) is True
+    assert calls == [command]
+
+
+def test_open_template_file_runs_selected_platform_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import loom_ui
+    import rubric_loom_weave as journey
+
+    destination = tmp_path / "editable.md"
+    destination.write_bytes(b"rubric")
+    command = ["test-file-opener", str(destination)]
+    calls: list[list[str]] = []
+    monkeypatch.setattr(journey, "file_open_command", lambda _path: command)
+
+    def run(selected: list[str], *, check: bool):
+        assert check is False
+        calls.append(selected)
+        return subprocess.CompletedProcess(selected, 0)
+
+    monkeypatch.setattr(journey.subprocess, "run", run)
+    assert journey.open_template_file(loom_ui.Term(plain=True), destination) is True
+    assert calls == [command]
 
 
 @pytest.mark.skipif(os.name != "posix", reason="PTY is POSIX-only")
@@ -381,10 +522,10 @@ def test_template_browse_back_then_quit_is_filesystem_read_only(
         cwd=isolated_repo,
         env_overrides={"PYTHONDONTWRITEBYTECODE": "1"},
     )
-    source_prompt = b"Where is the completed rubric you want to package?"
+    source_prompt = b"How would you like to begin?"
     session.wait_for(source_prompt)
     session.send(b"template\r")
-    session.wait_for(b"Which editable template should the loom show?")
+    session.wait_for(b"Which type of editable template would you like?")
     session.send(b"b\r")
     session.wait_for_count(source_prompt, 2)
     session.send(b"q\r")
@@ -410,12 +551,13 @@ def test_repeated_template_exits_keep_source_selection_constant_stack_and_read_o
     remembered = tmp_path / "remembered.md"
     state = {"source": str(remembered), "marker": ["unchanged"]}
     original_state = {"source": state["source"], "marker": list(state["marker"])}
-    exit_modes = ("template_back", "decline_copy", "destination_back")
+    exit_modes = ("template_back", "review_back", "folder_back")
     repetitions = 1_050
     source_defaults: list[str] = []
     source_option_keys: list[tuple[str, ...]] = []
     current_mode = ""
     source_selections = 0
+    review_calls = 0
 
     monkeypatch.setattr(templates, "catalog_or_error", lambda: (catalog, None))
     monkeypatch.setattr(journey, "input_lane_candidates", lambda: [remembered])
@@ -428,35 +570,42 @@ def test_repeated_template_exits_keep_source_selection_constant_stack_and_read_o
         default: str,
         allow_back: bool = False,
     ):
-        nonlocal current_mode, source_selections
+        nonlocal current_mode, source_selections, review_calls
         del term
-        if prompt == "Where is the completed rubric you want to package?":
+        if prompt == "How would you like to begin?":
             source_defaults.append(default)
             source_option_keys.append(tuple(key for key, _ in options))
             if source_selections == repetitions:
                 return loom_ui.BACK if final_choice == "back" else "q"
             current_mode = exit_modes[source_selections % len(exit_modes)]
+            review_calls = 0
             source_selections += 1
             assert allow_back is True
             return "template"
-        assert prompt == "Which editable template should the loom show?"
+        assert prompt == "Which type of editable template would you like?"
         assert allow_back is True
         if current_mode == "template_back":
             return loom_ui.BACK
         return "rubric-weave-intake-template.md"
 
-    def confirm(
+    def review_choice(
         term,
         prompt: str,
         *,
-        default: bool = False,
-        assume_yes: bool = False,
+        choices: tuple[str, ...],
         allow_back: bool = False,
+        allow_quit: bool = True,
     ):
-        del term, default, assume_yes
-        assert prompt == "Copy these exact bytes to a destination you choose?"
+        nonlocal review_calls
+        del term
+        assert prompt == "Save this editable template?"
+        assert choices == ("1", "2")
         assert allow_back is True
-        return current_mode == "destination_back"
+        assert allow_quit is False
+        review_calls += 1
+        if current_mode == "folder_back" and review_calls == 1:
+            return "1"
+        return loom_ui.BACK
 
     def prompt_text(
         term,
@@ -466,8 +615,8 @@ def test_repeated_template_exits_keep_source_selection_constant_stack_and_read_o
         allow_back: bool = False,
     ):
         del term, default
-        assert current_mode == "destination_back"
-        assert prompt == "Destination file"
+        assert current_mode == "folder_back"
+        assert prompt == "Folder for the editable copy"
         assert allow_back is True
         return loom_ui.BACK
 
@@ -475,7 +624,7 @@ def test_repeated_template_exits_keep_source_selection_constant_stack_and_read_o
         raise AssertionError("a template exit must not copy bytes")
 
     monkeypatch.setattr(loom_ui, "choose", choose)
-    monkeypatch.setattr(loom_ui, "confirm", confirm)
+    monkeypatch.setattr(loom_ui, "review_choice", review_choice)
     monkeypatch.setattr(loom_ui, "prompt_text", prompt_text)
     monkeypatch.setattr(templates, "copy_template", reject_copy)
 

@@ -22,7 +22,7 @@ def run_script(*args: str) -> subprocess.CompletedProcess[str]:
 def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     pin = json.loads((REPO_ROOT / "upstream" / "workbench_pin.json").read_text())
     assert pin["schema"] == "coursecraft.workbench_vendor_pin/1"
-    assert pin["source_commit"] == "60d81c9ce7d4518111443d03cf854b584644c3cc"
+    assert pin["source_commit"] == "a00fc4eca1834070f5208e03f4405dea9f87ad7f"
     assert (
         pin["accepted_producer_commit"]
         == "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
@@ -36,8 +36,8 @@ def test_vendor_pin_has_unique_byte_identical_targets() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_release_candidate_version_is_1_3_2() -> None:
-    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.2\n"
+def test_release_candidate_version_is_1_3_3() -> None:
+    assert (REPO_ROOT / "VERSION").read_text(encoding="utf-8") == "1.3.3\n"
 
 
 def test_tag_release_workflow_is_guarded_and_publishes_both_assets() -> None:

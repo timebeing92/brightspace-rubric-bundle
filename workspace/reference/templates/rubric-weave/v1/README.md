@@ -15,29 +15,35 @@ assets over the accepted producer at
 
 ## Choose and edit a template
 
-Use the DOCX when the rubric author prefers Word. Keep the accepted Word shape:
-exactly one title heading immediately before one simple rectangular rubric
-table, followed by the short ordinary-paragraph instructions. Do not add
-another paragraph before the table, merge cells, nest tables, add auxiliary
-columns, use multiple header bands, or detach scoring into another table.
+Use the DOCX when the rubric author prefers Word. Every rubric must be one
+Heading 1 title followed immediately by one simple rectangular rubric table.
+Rubrics without that title-and-table pairing are not read. To package more than
+one rubric from the same document, repeat the complete title-and-table block for
+each rubric before the instruction paragraphs. Give every rubric a unique
+title.
 
 The Word design resolves the `compact_reference_guide` preset with two named
 parser-form overrides: the sole title heading has 0 pt space before it, and
 there is no decorative first-page, header, or footer furniture. Those overrides
 preserve the required title → table → ordinary instructions body sequence.
+When a document holds multiple rubrics, the sequence becomes title → table →
+title → table, repeated as needed, followed by the ordinary instructions.
 
-Use the Markdown file when pipe-table editing is more reliable. Keep one
-level-two rubric heading, one rectangular pipe table, one Criterion column, at
-least two uniquely named level columns, and complete description cells. Escape
-a literal pipe inside a cell as `\|`.
+Use the Markdown file when pipe-table editing is more reliable. Start every
+rubric with a unique level-two heading (`## Rubric title`), followed by one
+rectangular pipe table. Repeat that heading-and-table block for each additional
+rubric. Escape a literal pipe inside a cell as `\|`.
 
 In either format:
 
+- keep one Criterion column and an optional Weight column;
 - add or remove criterion rows and performance-level columns as needed;
 - keep at least two uniquely named performance levels;
 - keep one criterion per row;
 - keep exactly one numeric score in every level header;
 - keep criterion names unique and every row complete;
+- do not merge or nest cells, add notes or row-number columns, or use multiple
+  header rows;
 - keep the included Weight column with explicit positive values totaling 100,
   or remove it only when an operator intends to review and explicitly approve
   the equal-weights fallback;
@@ -82,7 +88,9 @@ Verify committed bytes without writing:
 ```
 
 `manifest.json` records each manifest-relative asset path, version, media type,
-byte count, and SHA-256. Downstream consumers must verify those values before
-listing, copying, serving, or packaging a template. Missing or mismatched
-template bytes must disable the template convenience path; they must not change
-ordinary Weave producer behavior.
+byte count, SHA-256, and the synthetic rubric-title completion sentinel.
+Downstream consumers must verify those values before listing, copying, serving,
+or packaging a template. A same-session template shortcut must refuse a saved
+copy whose producer preflight still reports that sentinel title. Missing or
+mismatched template bytes must disable the template convenience path; they must
+not change ordinary Weave producer behavior.

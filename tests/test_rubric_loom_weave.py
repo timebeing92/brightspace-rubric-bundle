@@ -7,11 +7,13 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import time
 
 import pytest
+from docx import Document
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -166,6 +168,37 @@ def test_headless_weave_requires_named_final_approval(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert b"Producer preflight" in result.stdout
     assert b"--approve-weave" in result.stderr
+    assert not output.exists()
+
+
+def test_no_op_word_save_cannot_pass_the_starter_completion_gate(
+    tmp_path: Path,
+) -> None:
+    original = (
+        REPO_ROOT
+        / "workspace/reference/templates/rubric-weave/v1"
+        / "rubric-weave-intake-template.docx"
+    )
+    source = tmp_path / "saved-without-visible-edits.docx"
+    output = tmp_path / "refused"
+    shutil.copyfile(original, source)
+    original_binding = (
+        hashlib.sha256(source.read_bytes()).hexdigest(),
+        source.stat().st_size,
+    )
+
+    document = Document(source)
+    document.save(source)
+
+    saved_binding = (
+        hashlib.sha256(source.read_bytes()).hexdigest(),
+        source.stat().st_size,
+    )
+    assert saved_binding != original_binding
+    result = run_wizard(*weave_args(source, output))
+    assert result.returncode == 2
+    assert b"Starter template is not complete" in result.stdout
+    assert b"synthetic starter title" in result.stdout
     assert not output.exists()
 
 
@@ -714,12 +747,12 @@ def test_interactive_source_replacement_restarts_review_without_build(
     session.wait_for(b"Continue to final approval?")
     session.send(b"\r")
     session.wait_for(b"Type WEAVE")
-    source.write_bytes(
-        (
-            REPO_ROOT
-            / "workspace/reference/templates/rubric-weave/v1/"
-            / "rubric-weave-intake-template.md"
-        ).read_bytes()
+    source.write_text(
+        EXPLICIT.read_text(encoding="utf-8").replace(
+            "## Evidence Analysis",
+            "## Replacement Evidence Analysis",
+        ),
+        encoding="utf-8",
     )
     session.send(b"WEAVE\r")
     session.wait_for(b"source changed after the displayed preflight", timeout=20)

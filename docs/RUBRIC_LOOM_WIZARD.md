@@ -19,8 +19,11 @@ required Python packages. A guided launch starts by choosing a door:
   invokes producer preflight before writing, displays only producer-reported
   rubric counts, level labels, scoring sources, weight sources, and
   diagnostics, and requires the operator to type `WEAVE` before a build.
-  Before source selection it can also show the exact release-pinned Word and
-  Markdown intake templates. Merely listing or selecting one is read-only.
+  The source screen can also create a new rubric from an editable Word or
+  Markdown starter. The operator chooses the save folder and file name,
+  reviews the full path before copying, and can open and edit the template
+  without leaving the current Weave session. Opening its folder or finishing
+  for now remain available. Browsing or backing out remains read-only.
 
 Both doors use `loom_progress.py` to consume the orchestrators'
 `coursecraft.progress/1` events. Journey code supplies presentation flavor
@@ -148,10 +151,12 @@ media type, bytes, and SHA-256 that passed both pin and manifest checks.
 ## Weave journey
 
 1. Choose Weave.
-2. Pick or drag a DOCX, Markdown, or JSON source, or choose **Start from a
-   template** to inspect and explicitly copy a Word/Markdown starter.
-3. When a template was copied, complete and save it, then return and select
-   that saved copy; the copy action does not begin a build.
+2. Pick or drag a DOCX, Markdown, or JSON source, or choose **Create a new
+   rubric from an editable Word or Markdown template**.
+3. Choose Word or Markdown, review or change the destination folder and file
+   name, then copy the starter. Choose whether to open and edit the file while
+   keeping Weave open, open its folder and finish, or finish without opening
+   anything. Copying does not begin a build.
 4. Read the pinned producer preflight.
 5. Review reported rubrics, labels, scoring/weight sources, and diagnostics.
 6. Make only the fallback decisions the producer requests.
@@ -164,6 +169,23 @@ media type, bytes, and SHA-256 that passed both pin and manifest checks.
 
 The success card states: “Nothing was imported. Activity attachment remains
 manual.”
+
+One source file may contain multiple rubrics. Each rubric must have a unique
+title immediately followed by its own table. In Word, use a Heading 1 title;
+in Markdown, use a `##` title. Every table must contain one Criterion column,
+an optional Weight column, and at least two performance-level columns with a
+numeric score in each level heading. A criterion-and-points total alone is not
+the supported performance-level rubric shape.
+
+The same-session edit path waits while the operator works in Word or a
+Markdown editor. A byte-identical starter is held at the edit screen. Because
+Word can rewrite package bytes even when no visible content changed, producer
+preflight also compares the reported rubric title with the release-pinned
+synthetic completion sentinel. A source that still has that title is refused
+before build and returned to source selection. The last successful template
+folder and filename are remembered in the Weave state. If that file still
+exists, the next suggested name is safely numbered rather than selected for
+replacement.
 
 Delivery claims fail closed. The card loads the final `coursecraft.run/1`
 receipt and checks every named artifact's path, byte count, and SHA-256.
@@ -197,7 +219,8 @@ and remains protected from a containing `--force` output target.
   use the same words and facts as the live board.
 - TTY boards are display-paced; plain, piped, and `--brisk` runs are not.
 - Remembered answers use `rubric_loom.state/2`, namespaced under `unravel` and
-  `weave`. R3 flat state migrates only into Unravel.
+  `weave`. Weave also remembers the last successful template folder and file
+  name. R3 flat state migrates only into Unravel.
 - Weave logs use randomized, exclusive files under the local `output/logs`
   lane (or `RUBRIC_LOOM_LOG_DIR`); the logger refuses symlink targets before
   launching the producer.

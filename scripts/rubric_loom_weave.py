@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import secrets
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -210,6 +211,28 @@ def preflight_usable(preflight: dict) -> bool:
         and isinstance(preflight.get("rubrics"), list)
         and bool(preflight["rubrics"])
     )
+
+
+def template_completion_problem(preflight: dict) -> str | None:
+    """Refuse a producer-readable source that still carries the starter title."""
+
+    catalog, _ = templates.catalog_or_error()
+    if catalog is None:
+        return None
+    sentinel = " ".join(catalog.completion_sentinel.split()).casefold()
+    for rubric in preflight.get("rubrics", []):
+        if not isinstance(rubric, dict):
+            continue
+        name = rubric.get("name")
+        if (
+            isinstance(name, str)
+            and " ".join(name.split()).casefold() == sentinel
+        ):
+            return (
+                "Producer preflight still reports the synthetic starter title. "
+                "Replace the example rubric, save it, and run preflight again."
+            )
+    return None
 
 
 def preflight_source_binding(preflight: dict) -> tuple[str, int]:
@@ -425,106 +448,444 @@ def _template_kind(asset: templates.TemplateAsset) -> str:
 
 def _template_rows(asset: templates.TemplateAsset) -> list[tuple[str, str]]:
     return [
-        ("name", asset.name),
-        ("format", _template_kind(asset)),
-        ("version", asset.version),
-        ("media type", asset.media_type),
-        ("bytes", str(asset.bytes)),
-        ("SHA-256", asset.sha256),
-        ("release path", asset.release_path),
-        ("upstream path", asset.upstream_path),
+        ("format", f"{_template_kind(asset)} ({Path(asset.name).suffix})"),
+        ("required", "A title immediately followed by its rubric table"),
+        (
+            "table",
+            "Criterion + optional Weight + at least 2 scored level columns",
+        ),
+        ("multiple", "Repeat the titled table block in the same file"),
     ]
+
+
+def _default_template_folder(remembered: str = "") -> Path:
+    """Choose an existing, user-visible folder without creating anything."""
+
+    remembered_folder = _existing_template_folder(remembered)
+    if remembered_folder is not None:
+        return remembered_folder
+    for candidate in (INPUT_LANE, Path.home() / "Documents", Path.cwd()):
+        try:
+            mode = candidate.lstat().st_mode
+        except OSError:
+            continue
+        if stat.S_ISDIR(mode) and not stat.S_ISLNK(mode):
+            return candidate
+    return Path.cwd()
+
+
+def _default_template_name(
+    asset: templates.TemplateAsset,
+    remembered: str = "",
+) -> str:
+    remembered_name = _template_filename(remembered, asset)
+    if remembered_name is None and remembered:
+        remembered_name = _template_filename(Path(remembered).stem, asset)
+    return remembered_name or f"my-rubric{Path(asset.name).suffix.lower()}"
+
+
+def _available_template_name(folder: Path, filename: str) -> str:
+    """Suggest a non-colliding name without hiding explicit replacement."""
+
+    def occupied(path: Path) -> bool:
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        return True
+
+    if not occupied(folder / filename):
+        return filename
+    path = Path(filename)
+    for index in range(2, 10_000):
+        candidate = f"{path.stem}-{index}{path.suffix}"
+        if not occupied(folder / candidate):
+            return candidate
+    return filename
+
+
+def _template_destination_rows(
+    asset: templates.TemplateAsset,
+    folder: Path,
+    filename: str,
+) -> list[tuple[str, str]]:
+    return [
+        ("template", f"{_template_kind(asset)} ({Path(asset.name).suffix})"),
+        ("1. save folder", relative_display(folder)),
+        ("2. file name", filename),
+        ("full path", relative_display(folder / filename)),
+        ("", "Nothing has been copied yet."),
+    ]
+
+
+def _existing_template_folder(raw: str) -> Path | None:
+    folder = parse_typed_path(raw)
+    if folder is None:
+        return None
+    try:
+        folder = folder.expanduser().absolute()
+        mode = folder.lstat().st_mode
+    except OSError:
+        return None
+    if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+        return None
+    return folder
+
+
+def _template_filename(raw: str, asset: templates.TemplateAsset) -> str | None:
+    filename = raw.strip()
+    if (
+        not filename
+        or filename in {".", ".."}
+        or "/" in filename
+        or "\\" in filename
+    ):
+        return None
+    required_suffix = Path(asset.name).suffix.lower()
+    suffix = Path(filename).suffix.lower()
+    if not suffix:
+        filename += required_suffix
+    elif suffix != required_suffix:
+        return None
+    return filename
+
+
+def folder_open_command(path: Path) -> list[str] | None:
+    if sys.platform == "darwin":
+        return ["open", str(path)]
+    if os.name == "nt":
+        return ["explorer", str(path)]
+    opener = shutil.which("xdg-open")
+    return [opener, str(path)] if opener else None
+
+
+def file_open_command(path: Path) -> list[str] | None:
+    if sys.platform == "darwin":
+        return ["open", str(path)]
+    if os.name == "nt":
+        return ["cmd", "/c", "start", "", str(path)]
+    opener = shutil.which("xdg-open")
+    return [opener, str(path)] if opener else None
+
+
+def _run_open_command(
+    term: loom_ui.Term,
+    command: list[str] | None,
+    path: Path,
+    failure_message: str,
+) -> bool:
+    if command is None:
+        print(
+            loom_ui.status_line(
+                term,
+                "warn",
+                failure_message,
+                relative_display(path),
+            )
+        )
+        return False
+    try:
+        result = subprocess.run(command, check=False)
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0:
+        return True
+    print(
+        loom_ui.status_line(
+            term,
+            "warn",
+            failure_message,
+            relative_display(path),
+        )
+    )
+    return False
+
+
+def open_template_file(term: loom_ui.Term, path: Path) -> bool:
+    try:
+        mode = path.lstat().st_mode
+    except OSError:
+        mode = 0
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        print(
+            loom_ui.status_line(
+                term,
+                "warn",
+                "The template could not be opened automatically",
+                relative_display(path),
+            )
+        )
+        return False
+    return _run_open_command(
+        term,
+        file_open_command(path),
+        path,
+        "The template could not be opened automatically",
+    )
+
+
+def open_template_folder(term: loom_ui.Term, path: Path) -> bool:
+    try:
+        mode = path.lstat().st_mode
+    except OSError:
+        mode = 0
+    if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+        print(
+            loom_ui.status_line(
+                term,
+                "warn",
+                "The folder could not be opened automatically",
+                relative_display(path),
+            )
+        )
+        return False
+    return _run_open_command(
+        term,
+        folder_open_command(path),
+        path,
+        "The folder could not be opened automatically",
+    )
 
 
 def _template_next_steps(term: loom_ui.Term, destination: Path) -> None:
     print(
         loom_ui.card(
             term,
-            "Template copy ready",
+            "Your editable template is ready",
             [
-                ("copy", relative_display(destination)),
-                ("next", "Complete the rubric and save the edited file."),
-                ("then", "Return to Weave and select that saved copy."),
-                (
-                    "preflight",
-                    "Correct any scoring gap or explicitly approve only a permitted fallback.",
-                ),
-                ("write approval", "Type the named WEAVE approval."),
-                ("result", "A validated rubric-only package; no Brightspace import."),
-                ("attachment", "Manual in Brightspace after import."),
-                ("scoring", "Never silently invented."),
+                ("saved", relative_display(destination)),
+                ("next", "Replace the example and save your completed rubric."),
+                ("choice", "Continue here now, or finish and return later."),
             ],
         )
     )
 
 
-def _interactive_template_handoff(term: loom_ui.Term) -> bool:
+def _post_copy_handoff(
+    term: loom_ui.Term,
+    destination: Path,
+    original_binding: tuple[str, int],
+) -> Path | _TemplateHandoff:
+    """Open the new file or folder, with an optional same-session continuation."""
+
+    if not term.is_tty:
+        return TEMPLATE_HANDOFF
+    while True:
+        choice = loom_ui.choose(
+            term,
+            "What would you like to do next?",
+            [
+                (
+                    "continue",
+                    "Open the template, edit it, then continue to Weave here",
+                ),
+                ("folder", "Open its folder and finish for now"),
+                ("done", "Finish for now"),
+            ],
+            default="continue",
+        )
+        if choice == "done":
+            return TEMPLATE_HANDOFF
+        if choice == "folder":
+            if open_template_folder(term, destination.parent):
+                return TEMPLATE_HANDOFF
+            continue
+        if not open_template_file(term, destination):
+            continue
+        print(
+            loom_ui.card(
+                term,
+                "Edit, save, and return",
+                [
+                    ("file", relative_display(destination)),
+                    ("1", "Replace the synthetic example with your rubric."),
+                    ("2", "Save the file in Word or your Markdown editor."),
+                    ("3", "Return here and press Return to continue."),
+                ],
+            )
+        )
+        while True:
+            reply = loom_ui.prompt_text(
+                term,
+                "Continue with the saved rubric? (q = finish for now)",
+                allow_back=True,
+            )
+            if reply is loom_ui.BACK:
+                break
+            if str(reply).strip().lower() in {"q", "quit"}:
+                return TEMPLATE_HANDOFF
+            try:
+                mode = destination.lstat().st_mode
+                current_binding = file_source_binding(destination)
+            except OSError:
+                mode = 0
+                current_binding = original_binding
+            if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+                print(
+                    loom_ui.status_line(
+                        term,
+                        "bad",
+                        "The saved template is no longer a readable regular file",
+                    )
+                )
+                continue
+            if current_binding == original_binding:
+                print(
+                    loom_ui.status_line(
+                        term,
+                        "warn",
+                        "The template has not changed yet",
+                        "Save your edits, then press Return again.",
+                    )
+                )
+                continue
+            print(
+                loom_ui.status_line(
+                    term,
+                    "ok",
+                    "saved edits detected; continuing to Weave preflight",
+                    relative_display(destination),
+                )
+            )
+            return destination
+
+
+def _interactive_template_handoff(
+    term: loom_ui.Term,
+    *,
+    remembered_folder: str = "",
+    remembered_filename: str = "",
+    remember_destination: Callable[[dict[str, str]], None] | None = None,
+) -> Path | _TemplateHandoff | None:
     catalog, error = templates.catalog_or_error()
     if catalog is None:
         print(
             loom_ui.status_line(
                 term,
                 "warn",
-                "release-pinned templates are unavailable",
+                "editable templates are unavailable",
                 error or "integrity check failed",
             )
         )
-        return False
+        return None
     print(
         loom_ui.card(
             term,
-            "Release-pinned Weave templates",
+            "Create a new rubric from a template",
             [
-                ("set", f"{catalog.template_set} {catalog.version}"),
-                ("Workbench ref", catalog.source_commit),
-                ("producer semantics", catalog.accepted_producer_commit),
                 (
                     "",
-                    "Listing and selecting are read-only. A copy is written only after "
-                    "you explicitly choose a destination.",
+                    "Choose Word or Markdown. Rubric Loom will make an editable "
+                    "copy using the folder and file name you choose.",
                 ),
             ],
         )
     )
     options = [
-        (asset.name, f"{_template_kind(asset)} — {asset.name}")
+        (
+            asset.name,
+            (
+                "Word document (.docx) — easiest for most people"
+                if asset.name.endswith(".docx")
+                else "Markdown file (.md) — for plain-text editing"
+            ),
+        )
         for asset in catalog.assets
     ]
     options.append(("back", "Return to source selection"))
     choice = loom_ui.choose(
         term,
-        "Which editable template should the loom show?",
+        "Which type of editable template would you like?",
         options,
         default=catalog.assets[0].name,
         allow_back=True,
     )
     if choice is loom_ui.BACK or choice == "back":
-        return False
+        return None
     asset = next(item for item in catalog.assets if item.name == choice)
-    print(loom_ui.card(term, "Pinned template details", _template_rows(asset)))
-    copy_reply = loom_ui.confirm(
-        term,
-        "Copy these exact bytes to a destination you choose?",
-        default=False,
-        allow_back=True,
+    print(loom_ui.card(term, "About this template", _template_rows(asset)))
+    folder = _default_template_folder(remembered_folder)
+    base_filename = _default_template_name(asset, remembered_filename)
+    filename = _available_template_name(
+        folder,
+        base_filename,
     )
-    if copy_reply is loom_ui.BACK or not copy_reply:
-        return False
-
-    default_destination = Path.cwd() / asset.name
+    filename_edited = False
     while True:
-        raw = loom_ui.prompt_text(
+        guidance(
             term,
-            "Destination file",
-            default=str(default_destination),
-            allow_back=True,
+            "Press Return to save, or change the numbered folder or file name.",
         )
-        if raw is loom_ui.BACK:
-            return False
-        destination = parse_typed_path(str(raw))
-        if destination is None:
+        print(
+            loom_ui.card(
+                term,
+                "Where should the editable copy go?",
+                _template_destination_rows(asset, folder, filename),
+            )
+        )
+        reply = loom_ui.review_choice(
+            term,
+            "Save this editable template?",
+            choices=("1", "2"),
+            allow_back=True,
+            allow_quit=False,
+        )
+        if reply is loom_ui.BACK:
+            return None
+        if reply == "1":
+            print()
+            guidance(term, "Tip: drag a folder into this window to paste its path.")
+            print()
+            raw_folder = loom_ui.prompt_text(
+                term,
+                "Folder for the editable copy",
+                default=str(folder),
+                allow_back=True,
+            )
+            if raw_folder is loom_ui.BACK:
+                continue
+            chosen_folder = _existing_template_folder(str(raw_folder))
+            if chosen_folder is None:
+                print(
+                    loom_ui.status_line(
+                        term,
+                        "bad",
+                        "Choose an existing folder (not a file or shortcut)",
+                    )
+                )
+                continue
+            folder = chosen_folder
+            filename = _available_template_name(
+                folder,
+                filename if filename_edited else base_filename,
+            )
             continue
-        destination = destination.expanduser().absolute()
+        if reply == "2":
+            raw_name = loom_ui.prompt_text(
+                term,
+                "File name",
+                default=filename,
+                allow_back=True,
+            )
+            if raw_name is loom_ui.BACK:
+                continue
+            chosen_name = _template_filename(str(raw_name), asset)
+            if chosen_name is None:
+                print(
+                    loom_ui.status_line(
+                        term,
+                        "bad",
+                        f"Use a file name ending in {Path(asset.name).suffix}",
+                    )
+                )
+                continue
+            filename = chosen_name
+            filename_edited = True
+            continue
+
+        destination = (folder / filename).absolute()
         replace = False
         try:
             destination_stat = destination.lstat()
@@ -550,7 +911,7 @@ def _interactive_template_handoff(term: loom_ui.Term) -> bool:
                 continue
             replace_reply = loom_ui.confirm(
                 term,
-                "Replace this existing regular file with the pinned template?",
+                "Replace this existing file with a fresh template?",
                 default=False,
                 allow_back=True,
             )
@@ -570,12 +931,23 @@ def _interactive_template_handoff(term: loom_ui.Term) -> bool:
             loom_ui.status_line(
                 term,
                 "ok",
-                f"copied {_template_kind(copied_asset)} template",
-                f"{copied_asset.bytes} bytes · {copied_asset.sha256}",
+                f"saved {_template_kind(copied_asset)} template",
+                relative_display(copied_path),
             )
         )
         _template_next_steps(term, copied_path)
-        return True
+        if remember_destination is not None:
+            remember_destination(
+                {
+                    "template_folder": str(copied_path.parent),
+                    "template_filename": copied_path.name,
+                }
+            )
+        return _post_copy_handoff(
+            term,
+            copied_path,
+            (copied_asset.sha256, copied_asset.bytes),
+        )
 
 
 def run_template_headless(term: loom_ui.Term, args) -> int:
@@ -638,7 +1010,14 @@ def run_template_headless(term: loom_ui.Term, args) -> int:
     return 0
 
 
-def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateHandoff:
+def pick_source(
+    term: loom_ui.Term,
+    remembered: str,
+    *,
+    template_folder: str = "",
+    template_filename: str = "",
+    remember_destination: Callable[[dict[str, str]], None] | None = None,
+) -> Path | None | _TemplateHandoff:
     """Choose a source with constant-stack navigation between source screens."""
 
     while True:
@@ -648,7 +1027,7 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
             options.append(
                 (
                     "template",
-                    "Start from a release-pinned Word or Markdown template",
+                    "Create a new rubric from an editable Word or Markdown template",
                 )
             )
         else:
@@ -684,7 +1063,7 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
             default = "demo"
         choice = loom_ui.choose(
             term,
-            "Where is the completed rubric you want to package?",
+            "How would you like to begin?",
             options,
             default=default,
             allow_back=True,
@@ -692,8 +1071,14 @@ def pick_source(term: loom_ui.Term, remembered: str) -> Path | None | _TemplateH
         if choice is loom_ui.BACK or choice == "q":
             return None
         if choice == "template":
-            if _interactive_template_handoff(term):
-                return TEMPLATE_HANDOFF
+            handoff = _interactive_template_handoff(
+                term,
+                remembered_folder=template_folder,
+                remembered_filename=template_filename,
+                remember_destination=remember_destination,
+            )
+            if handoff is not None:
+                return handoff
             continue
         if choice == "demo":
             return FIXTURE
@@ -1128,6 +1513,17 @@ def run_headless(
     if not preflight_usable(preflight):
         refusal_card(term, preflight)
         return 2
+    completion_problem = template_completion_problem(preflight)
+    if completion_problem:
+        print(
+            loom_ui.status_line(
+                term,
+                "bad",
+                "Starter template is not complete",
+                completion_problem,
+            )
+        )
+        return 2
     try:
         source_binding = preflight_source_binding(preflight)
         approved_source_label = preflight_source_label(preflight)
@@ -1201,6 +1597,14 @@ def run_interactive(
     if args.context_dir is not None:
         args.context_dir = args.context_dir.expanduser().absolute()
 
+    def remember(values: dict[str, object]) -> None:
+        state.update(values)
+        save_state(dict(state))
+
+    def remembered_text(key: str) -> str:
+        value = state.get(key)
+        return value if isinstance(value, str) else ""
+
     while True:
         args.allow_even_spacing = explicit_even_spacing
         args.allow_equal_weights = explicit_equal_weights
@@ -1209,16 +1613,22 @@ def run_interactive(
         print()
         guidance(
             term,
-            "Choose a completed Word, Markdown, or JSON rubric. This step is "
-            "read-only.",
+            "Choose a completed rubric file, or create an editable starter "
+            "template. Nothing is packaged until you approve a completed source.",
         )
         print()
         if source is None:
-            picked = pick_source(term, str(state.get("source", "")))
+            picked = pick_source(
+                term,
+                remembered_text("source"),
+                template_folder=remembered_text("template_folder"),
+                template_filename=remembered_text("template_filename"),
+                remember_destination=remember,
+            )
             if picked is TEMPLATE_HANDOFF:
                 print(
-                    "  no package was built. Complete the copied template, "
-                    "then return and select it."
+                    "  Your template is ready; no package was built. Its folder "
+                    "will be remembered when you return to Weave."
                 )
                 return 0
             source = picked
@@ -1278,6 +1688,20 @@ def run_interactive(
                 )
             )
             preflight_card(term, preflight)
+        completion_problem = template_completion_problem(preflight)
+        if completion_problem:
+            print(
+                loom_ui.status_line(
+                    term,
+                    "bad",
+                    "Starter template is not complete",
+                    completion_problem,
+                )
+            )
+            if provided_source is None:
+                source = None
+                continue
+            return 0
         try:
             source_binding = preflight_source_binding(preflight)
             approved_source_label = preflight_source_label(preflight)
@@ -1391,7 +1815,7 @@ def run_interactive(
 
         assert label is not None
         assert out_dir is not None
-        save_state(
+        remember(
             {
                 "source": str(source),
                 "allow_even_spacing": bool(args.allow_even_spacing),

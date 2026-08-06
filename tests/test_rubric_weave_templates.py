@@ -59,6 +59,10 @@ def test_manifest_records_exact_version_media_path_bytes_and_sha256() -> None:
         "commit": "71552e912b79d73a00b4d70fd97bd32386fbe2a4",
         "authoring_contract": "coursecraft.rubric_authoring/1",
     }
+    assert manifest["completion_sentinel"] == {
+        "field": "rubric_title",
+        "value": templates.DEFAULT_SPEC.title,
+    }
 
     entries = {entry["path"]: entry for entry in manifest["templates"]}
     assert set(entries) == {
@@ -127,11 +131,17 @@ def test_docx_uses_the_accepted_table_first_shape_and_explicit_geometry() -> Non
     instruction_text = "\n".join(
         paragraph.text for paragraph in document.paragraphs[1:]
     )
-    assert "never invents scoring silently" in instruction_text
-    assert "not a Brightspace import" in instruction_text
-    assert "Activity attachment is a separate manual step" in instruction_text
-    assert "Do not merge cells" in instruction_text
-    assert "multiple header bands" in instruction_text
+    assert "Replace the synthetic example" in instruction_text
+    assert "Replace the title, criteria, level names" in instruction_text
+    assert "A table without a title" in instruction_text
+    assert "This file can package multiple rubrics" in instruction_text
+    assert "Before these instructions" in instruction_text
+    assert (
+        "Brightspace import and activity attachment are separate"
+        in instruction_text
+    )
+    assert "no merged or nested cells" in instruction_text
+    assert "multiple header rows" in instruction_text
     assert "one criterion per row" in instruction_text
 
 
@@ -156,6 +166,55 @@ def test_docx_and_markdown_express_the_same_rubric_semantics() -> None:
     assert {criterion["weight_source"] for criterion in docx["criteria"]} == {
         "explicit_weight"
     }
+
+
+def test_supported_shape_reads_multiple_titled_rubrics_from_one_file(
+    tmp_path: Path,
+) -> None:
+    titles = ("SYNTHETIC FIRST RUBRIC", "SYNTHETIC SECOND RUBRIC")
+
+    word_path = tmp_path / "multiple-rubrics.docx"
+    document = Document()
+    for index, title in enumerate(titles, start=1):
+        document.add_paragraph(title, style="Heading 1")
+        table = document.add_table(rows=2, cols=4)
+        headers = ("Criterion", "Weight", "Complete (100)", "Revise (0)")
+        for cell, value in zip(table.rows[0].cells, headers):
+            cell.text = value
+        values = (
+            f"Synthetic criterion {index}",
+            "100",
+            f"Synthetic complete description {index}.",
+            f"Synthetic revise description {index}.",
+        )
+        for cell, value in zip(table.rows[1].cells, values):
+            cell.text = value
+    document.save(word_path)
+
+    markdown_path = tmp_path / "multiple-rubrics.md"
+    markdown_path.write_text(
+        "\n\n".join(
+            (
+                f"## {title}\n\n"
+                "| Criterion | Weight | Complete (100) | Revise (0) |\n"
+                "| --- | --- | --- | --- |\n"
+                f"| Synthetic criterion {index} | 100 | "
+                f"Synthetic complete description {index}. | "
+                f"Synthetic revise description {index}. |"
+            )
+            for index, title in enumerate(titles, start=1)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    for source in (word_path, markdown_path):
+        contract = normalize_source(source)
+        assert [rubric["name"] for rubric in contract["rubrics"]] == list(titles)
+        assert contract["approvals"] == {
+            "even_spacing": False,
+            "equal_weights": False,
+        }
 
 
 def test_both_templates_preflight_and_build_valid_packages_without_fallback(

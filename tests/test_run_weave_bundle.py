@@ -103,7 +103,7 @@ def test_build_emits_required_artifacts_and_final_receipt(tmp_path: Path) -> Non
     ).stdout.strip()
     assert receipt["producer"]["extensions"]["identity_basis"] == "bundle_root_git"
     assert receipt["extensions"]["workbench_pin"]["source_commit"] == (
-        "60d81c9ce7d4518111443d03cf854b584644c3cc"
+        "a00fc4eca1834070f5208e03f4405dea9f87ad7f"
     )
     assert receipt["extensions"]["workbench_pin"]["accepted_producer_commit"] == (
         "71552e912b79d73a00b4d70fd97bd32386fbe2a4"
