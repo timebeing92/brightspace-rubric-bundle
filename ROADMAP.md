@@ -131,6 +131,16 @@ release.
 
 ## Standing constraints
 
+- Shared progress-contract convergence is held. The schema expanded for Weave
+  at `7ea207b` adds six optional `run_end.outputs` paths while retaining the
+  `coursecraft.progress/1` identifier; that shape is on `main` and shipped in
+  v1.1.0 through v1.3.2, not only on a later candidate. The 2026-08-22
+  recommendation is to ratify those existing paths as an additive `/1`
+  evolution, but ecosystem record
+  `PR-2026-923-progress-weave-output-convergence` remains tabled and undecided.
+  Do not edit this copy merely to clear the hash mismatch. Resume through
+  canonical Blueprint review, full consumer conformance, coordinated schema
+  propagation, and the root parity gate.
 - Upstream-first: extraction and build semantics change in the Workbench,
   never here. The blueprint bundle's copies of the extraction scripts are
   governed by its own drift maps; this repo's copies are governed by the
