@@ -30,8 +30,22 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+  runtime-recovery:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install "pytest>=8,<9"
+      - run: python -m pytest -q tests/test_private_runtime_identity.py
+
   release-inputs:
-    needs: verify
+    needs: [verify, runtime-recovery]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

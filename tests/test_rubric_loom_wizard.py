@@ -628,7 +628,7 @@ def test_missing_dependencies_offer_one_locked_local_repair(
 
     def install(command, *, cwd, check):
         assert command[:4] == [
-            sys.executable,
+            str(wizard.local_venv_python()),
             "-m",
             "pip",
             "install",

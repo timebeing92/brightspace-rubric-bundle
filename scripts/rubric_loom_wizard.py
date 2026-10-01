@@ -570,8 +570,13 @@ def local_venv_python() -> Path:
 
 
 def running_in_local_venv() -> bool:
+    """Identify the environment, not its shared base interpreter executable."""
     try:
-        return Path(sys.executable).resolve() == local_venv_python().resolve()
+        prefix = Path(sys.prefix).resolve()
+        return (
+            prefix != Path(sys.base_prefix).resolve()
+            and prefix == VENV_ROOT.resolve()
+        )
     except OSError:
         return False
 
@@ -634,7 +639,7 @@ def repair_runtime_dependencies(
 
     if in_private_environment:
         command = [
-            sys.executable,
+            str(local_venv_python()),
             "-m",
             "pip",
             "install",
