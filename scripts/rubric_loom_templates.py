@@ -75,6 +75,7 @@ class TemplateCatalog:
     template_set: str
     version: str
     manifest_path: str
+    completion_sentinel: str
     assets: tuple[TemplateAsset, ...]
 
     def release_record(self) -> dict[str, Any]:
@@ -86,6 +87,10 @@ class TemplateCatalog:
             "template_set": self.template_set,
             "version": self.version,
             "manifest_path": self.manifest_path,
+            "completion_sentinel": {
+                "field": "rubric_title",
+                "value": self.completion_sentinel,
+            },
             "templates": [asset.release_record() for asset in self.assets],
         }
 
@@ -197,6 +202,17 @@ def load_catalog(root: Path = REPO_ROOT) -> TemplateCatalog:
         raise TemplateIntegrityError(
             "template manifest does not retain the accepted producer semantics"
         )
+    completion_sentinel = manifest.get("completion_sentinel")
+    if (
+        not isinstance(completion_sentinel, dict)
+        or set(completion_sentinel) != {"field", "value"}
+        or completion_sentinel.get("field") != "rubric_title"
+        or not isinstance(completion_sentinel.get("value"), str)
+        or not completion_sentinel["value"].strip()
+    ):
+        raise TemplateIntegrityError(
+            "template manifest completion sentinel is invalid"
+        )
     boundaries = manifest.get("boundaries")
     required_boundaries = {"scoring", "brightspace_import", "activity_attachment"}
     if (
@@ -270,6 +286,7 @@ def load_catalog(root: Path = REPO_ROOT) -> TemplateCatalog:
         template_set=EXPECTED_TEMPLATE_SET,
         version=EXPECTED_VERSION,
         manifest_path=MANIFEST_RELATIVE,
+        completion_sentinel=completion_sentinel["value"],
         assets=tuple(assets),
     )
 

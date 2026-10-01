@@ -628,7 +628,7 @@ def test_missing_dependencies_offer_one_locked_local_repair(
 
     def install(command, *, cwd, check):
         assert command[:4] == [
-            sys.executable,
+            str(wizard.local_venv_python()),
             "-m",
             "pip",
             "install",
@@ -650,14 +650,65 @@ def test_missing_dependencies_offer_one_locked_local_repair(
     assert core_ok is True
     assert docx_ok is True
     assert confirmations == [
-        "Install the missing Rubric Loom support packages now?"
+        "Install or update the Rubric Loom support packages now?"
     ]
-    assert "One-time setup needed" in output
+    assert "Private environment update needed" in output
     assert "is already installed" in output
     assert "Python itself will not be reinstalled." in output
     assert "jsonschema, openpyxl, python-docx" in output
     assert "requirements-lock.txt" in output
     assert "Environment ready" in output
+
+
+def test_runtime_lock_detects_an_importable_but_outdated_distribution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import rubric_loom_wizard as wizard
+
+    monkeypatch.setattr(
+        wizard,
+        "locked_runtime_requirements",
+        lambda: {"jsonschema": "4.26.0"},
+    )
+    monkeypatch.setattr(
+        wizard.importlib_metadata,
+        "version",
+        lambda _package: "4.25.1",
+    )
+
+    assert wizard.runtime_lock_mismatches() == ["jsonschema"]
+
+
+def test_drifted_runtime_lock_requests_a_locked_upgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import loom_ui
+    import rubric_loom_wizard as wizard
+
+    mismatch_results = iter((["jsonschema"], []))
+    repair_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        wizard,
+        "runtime_lock_mismatches",
+        lambda: list(next(mismatch_results)),
+    )
+    monkeypatch.setattr(wizard, "missing_runtime_packages", lambda: [])
+    monkeypatch.setattr(wizard, "environment_checks", lambda: [])
+    monkeypatch.setattr(wizard, "module_present", lambda _name: True)
+
+    def repair(term, packages, *, assume_yes):
+        del term
+        assert assume_yes is False
+        repair_calls.append(list(packages))
+        return True
+
+    monkeypatch.setattr(wizard, "repair_runtime_dependencies", repair)
+
+    assert wizard.ensure_environment(
+        loom_ui.Term(plain=True),
+        assume_yes=False,
+    ) == (True, True)
+    assert repair_calls == [["jsonschema"]]
 
 
 def test_first_setup_reuses_python_and_names_only_the_private_environment(

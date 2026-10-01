@@ -135,38 +135,37 @@ DEFAULT_SPEC = TemplateSpec(
 
 INSTRUCTION_PARAGRAPHS = (
     (
-        "Edit the synthetic example.",
+        "Replace the synthetic example.",
         "Replace the title, criteria, level names, numeric scores, weights, and "
         "descriptions. You may add or remove criterion rows and performance-level "
-        "columns; keep one Criterion column, one criterion per row, and at least "
-        "two uniquely named level columns.",
+        "columns as needed.",
     ),
     (
-        "Keep scoring explicit.",
-        "Put exactly one numeric score in every level header, such as Ready to "
-        "Share (100). The Weight column is structurally optional, but this example "
-        "includes explicit positive weights totaling 100 so it needs no fallback.",
+        "Give every rubric a title.",
+        "In Word, use one Heading 1 line immediately above the table. In "
+        "Markdown, begin the title with ##. A table without a title in that "
+        "position will not be read as a rubric.",
     ),
     (
-        "Avoid ambiguous Word structure.",
-        "Keep one simple rectangular table. Do not merge cells, nest tables, use "
-        "multiple header bands, add row-number or notes columns, detach scoring "
-        "into another table, or rely on a decorative layout. Correct ambiguous "
-        "structure or use Markdown or JSON.",
+        "Use this table shape.",
+        "Keep one Criterion column, an optional Weight column, and at least two "
+        "performance-level columns. Include one criterion per row, one numeric "
+        "score in each level heading, and a description in every level cell. If "
+        "included, positive weights must total 100.",
     ),
     (
-        "Correct or approve a fallback visibly.",
-        "If preflight reports missing or ambiguous scores or weights, correct the "
-        "source and run it again. Approve even spacing or equal weights only when "
-        "you intentionally choose that fallback; the producer records the "
-        "approval and never invents scoring silently.",
+        "Add more rubrics by repeating the block.",
+        "This file can package multiple rubrics. Before these instructions, add "
+        "a unique title followed immediately by its own table for each rubric. "
+        "In Word, use Heading 1 titles. In Markdown, use ## titles.",
     ),
     (
-        "Respect the Brightspace boundary.",
-        "Weave builds and validates a rubric-only import package; that is not a "
-        "Brightspace import or proof of Brightspace acceptance. Importing the "
-        "package does not attach the rubric to an assignment, discussion, quiz, "
-        "or grade item. Activity attachment is a separate manual step.",
+        "Keep tables simple.",
+        "Use rectangular tables with no merged or nested cells, extra notes or "
+        "row-number columns, or multiple header rows. Weave will flag missing "
+        "scores or weights for correction or explicit approval. It creates a "
+        "rubric-only package; Brightspace import and activity attachment are "
+        "separate steps.",
     ),
 )
 
@@ -537,7 +536,10 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _manifest(template_payloads: dict[str, bytes]) -> bytes:
+def _manifest(
+    template_payloads: dict[str, bytes],
+    spec: TemplateSpec,
+) -> bytes:
     media_types = {
         DOCX_NAME: DOCX_MEDIA_TYPE,
         MARKDOWN_NAME: MARKDOWN_MEDIA_TYPE,
@@ -551,6 +553,10 @@ def _manifest(template_payloads: dict[str, bytes]) -> bytes:
             "repository": "coursecraft_workbench",
             "commit": ACCEPTED_PRODUCER_COMMIT,
             "authoring_contract": AUTHORING_CONTRACT,
+        },
+        "completion_sentinel": {
+            "field": "rubric_title",
+            "value": spec.title,
         },
         "templates": [
             {
@@ -592,7 +598,7 @@ def generated_assets(spec: TemplateSpec = DEFAULT_SPEC) -> dict[str, bytes]:
     }
     return {
         **template_payloads,
-        MANIFEST_NAME: _manifest(template_payloads),
+        MANIFEST_NAME: _manifest(template_payloads, spec),
     }
 
 

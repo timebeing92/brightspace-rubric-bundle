@@ -45,6 +45,9 @@ opens—before it asks you to choose Unravel or Weave, and before it asks for a
 file or folder path. If setup is needed, the launcher explains what is missing
 and offers to install the pinned dependencies into the Loom's own private
 environment. It does not install packages into your system Python.
+On later launches, it compares the installed support-package versions with the
+release's exact dependency lock and offers a private-environment refresh when
+an upgrade or damaged installation has drifted from that lock.
 
 ### macOS
 
@@ -107,7 +110,11 @@ Choose **Weave** when you have a completed rubric that needs to become a
 Brightspace package.
 
 1. Select a supported Word, Markdown, or JSON rubric, try the demonstration,
-   or copy a release-pinned intake template.
+   or create a new rubric from an editable Word or Markdown template. The
+   guided flow lets you choose the save folder and file name, previews the
+   complete path, and remembers that destination for next time. After copying,
+   open the template and continue in the same Weave session, open its folder,
+   or finish and return later.
 2. Read the producer preflight: rubric structure, level labels, scoring
    evidence, weights, and diagnostics.
 3. Correct missing information in the source, or explicitly approve only a
@@ -120,6 +127,21 @@ Weave never invents scoring silently. Its final receipt binds the package to
 the exact source bytes you reviewed. A successful build is not an import:
 import the ZIP yourself, then attach the rubric to activities manually in
 Brightspace.
+
+A single Word or Markdown source may contain multiple rubrics. Each one needs
+a unique title immediately followed by its table: use Heading 1 in Word or
+`##` in Markdown. Tables need one Criterion column, an optional Weight column,
+and at least two scored performance-level columns. A criterion-and-points total
+alone is not the supported performance-level rubric shape.
+
+When **Open the template, edit it, then continue to Weave here** is selected,
+Rubric Loom opens the file in its default application and waits at a short
+return screen. After the file is saved, Return continues directly to producer
+preflight. An unchanged starter is not allowed through that shortcut. If the
+editor rewrites a Word file during a no-op save, producer preflight still
+recognizes the synthetic starter title and refuses the build. If the remembered
+filename already exists on a later run, Rubric Loom proposes a numbered
+filename instead of defaulting to replacement.
 
 ## What the software reads
 
@@ -253,7 +275,7 @@ copies of the portable producer files. The immutable source ref and every
 promoted file digest are recorded in `upstream/workbench_pin.json`.
 
 The current distribution ref is Workbench
-`60d81c9ce7d4518111443d03cf854b584644c3cc`; the accepted producer identity
+`a00fc4eca1834070f5208e03f4405dea9f87ad7f`; the accepted producer identity
 and semantics trace to
 `71552e912b79d73a00b4d70fd97bd32386fbe2a4`. Bundle-only code—its
 orchestrators, terminal experience, synthetic journey, environment handling,
